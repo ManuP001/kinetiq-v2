@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Office lock/temp files (LibreOffice / Excel)
+.~lock.*#
+~$*
+
+# Build / deps
+node_modules/
+dist/
+out/
+.next/
+
+# Gate 0 eval data (local device exports, not source data)
+evals/gate0/data/*.json

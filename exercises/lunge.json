@@ -1,0 +1,105 @@
+{
+  "exercise_id": "lunge",
+  "schema_version": 2,
+  "name": "Forward Lunge",
+  "demo_video_url": "TBD",
+  "target_muscles": ["quads", "glutes", "hamstrings", "hip_flexors"],
+  "difficulty": "beginner",
+  "equipment": [],
+  "is_premium": false,
+  "estimated_duration_seconds": 150,
+  "reference_keypoints": {
+    "correct": {
+      "description": "Front knee tracks over toes (not beyond), back knee approaches floor, torso upright",
+      "key_angles": {
+        "front_knee_angle_at_bottom": { "min": 80, "max": 100 },
+        "back_knee_angle_at_bottom": { "min": 80, "max": 110 },
+        "torso_lean_degrees": { "max": 20 }
+      }
+    },
+    "common_errors": [
+      {
+        "error_id": "front_knee_cave",
+        "description": "Front knee collapses inward",
+        "severity": "high",
+        "status": "unresolved_spec_conflict",
+        "status_note": "Conflicts with Vision_Contract's single knee_past_toe_x=0.06 check (different name/value). Not implemented in kinetiq-demo2 pending trainer/PT-confirmed semantics — see CHANGELOG 0.3.0.",
+        "keypoint_signature": {
+          "rule": "leading_knee.x deviates medially from leading_ankle.x > threshold.knee_cave_x",
+          "threshold_key": "knee_cave_x",
+          "phase_detected_in": ["descending", "bottom"]
+        }
+      },
+      {
+        "error_id": "front_knee_overextend",
+        "description": "Front knee travels too far past toes — increases knee stress",
+        "severity": "high",
+        "status": "unresolved_spec_conflict",
+        "status_note": "Conflicts with Vision_Contract's single knee_past_toe_x=0.06 check (different name/value). Not implemented in kinetiq-demo2 pending trainer/PT-confirmed semantics — see CHANGELOG 0.3.0.",
+        "keypoint_signature": {
+          "rule": "leading_knee.z - leading_toe.z > threshold.knee_overextend_z",
+          "threshold_key": "knee_overextend_z",
+          "phase_detected_in": ["descending", "bottom"]
+        }
+      },
+      {
+        "error_id": "shallow_lunge",
+        "description": "Insufficient depth — front knee angle does not reach bottom range",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "front_knee_angle_at_bottom > threshold.front_knee_angle_bottom_max",
+          "threshold_key": "front_knee_angle_bottom_max",
+          "phase_detected_in": ["bottom"]
+        }
+      }
+    ]
+  },
+  "thresholds": {
+    "front_knee_angle_bottom_max": 100,
+    "torso_lean_max_deg": 20,
+    "knee_cave_x": 0.05,
+    "knee_overextend_z": 0.08
+  },
+  "rep_counting": {
+    "phases": ["standing", "descending", "bottom", "ascending"],
+    "rep_complete_transition": "ascending_to_standing",
+    "bottom_position_criterion": "back_knee_near_floor",
+    "top_position_criterion": "both_legs_extended_standing",
+    "side_tracking": "alternate_left_right"
+  },
+  "coaching_cues": {
+    "setup": "Stand tall, step forward with control, keep your torso upright",
+    "execution": "Front knee over your toes, lower your back knee toward the floor",
+    "good_rep": "Good depth and control",
+    "set_complete_no_flags": "Nice lunges. Consistent depth.",
+    "set_complete_with_flags": "Good work. Next set — {flag_cue}.",
+    "flag_cues": {
+      "front_knee_cave": "Drive your front knee outward",
+      "front_knee_overextend": "Keep your knee behind your toes — step a little further forward",
+      "shallow_lunge": "Drop your back knee a little lower"
+    }
+  },
+  "contraindications": {
+    "knee_injury": {
+      "flag": true,
+      "modification": "Reduce depth and shorten your stride. Stop where you feel knee discomfort. Hold onto a wall for balance.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "back_injury": {
+      "flag": true,
+      "modification": "Keep your torso tall and avoid leaning forward. Stop if you feel lumbar pressure.",
+      "show_on": ["exercise_detail"]
+    },
+    "hypertension": {
+      "flag": false,
+      "modification": "Avoid breath-holding. Breathe out as you push back up to standing.",
+      "show_on": ["exercise_detail"]
+    }
+  },
+  "model_assist": {
+    "enabled": false,
+    "feature_window_frames": 14,
+    "derived_features": ["left_knee_angle", "right_knee_angle", "torso_lean_deg", "symmetry", "tempo_ms", "range_of_motion"],
+    "notes": "Advisory only. May detect rule-less errors (e.g. balance instability, stride asymmetry between sides). Cannot override rep count or safety flags. Default off until eval passes."
+  }
+}

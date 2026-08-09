@@ -1,0 +1,98 @@
+{
+  "exercise_id": "pushup",
+  "schema_version": 2,
+  "name": "Push-Up",
+  "demo_video_url": "TBD",
+  "target_muscles": ["chest", "triceps", "anterior_deltoid", "core"],
+  "difficulty": "beginner",
+  "equipment": [],
+  "is_premium": false,
+  "estimated_duration_seconds": 90,
+  "reference_keypoints": {
+    "correct": {
+      "description": "Body forms a straight line from heels to head, elbows track back at 45 degrees, chest reaches near floor",
+      "key_angles": {
+        "elbow_angle_at_bottom": { "min": 70, "max": 95 },
+        "body_alignment_deviation_degrees": { "max": 15 }
+      }
+    },
+    "common_errors": [
+      {
+        "error_id": "elbow_flare",
+        "description": "Elbows flare out beyond 60 degrees from torso",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "angle(shoulder, elbow, torso_midline) > threshold.elbow_flare_deg",
+          "threshold_key": "elbow_flare_deg",
+          "phase_detected_in": ["descending", "bottom", "ascending"]
+        }
+      },
+      {
+        "error_id": "hip_sag",
+        "description": "Hips drop below straight-line body position",
+        "severity": "high",
+        "keypoint_signature": {
+          "rule": "angle(shoulder, hip, ankle) < threshold.hip_sag_angle_min",
+          "threshold_key": "hip_sag_angle_min",
+          "phase_detected_in": ["descending", "bottom", "ascending"]
+        }
+      },
+      {
+        "error_id": "shallow_pushup",
+        "description": "Elbows do not reach 90 degrees — insufficient depth",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "elbow_angle_at_bottom > threshold.depth_elbow_angle_max",
+          "threshold_key": "depth_elbow_angle_max",
+          "phase_detected_in": ["bottom"]
+        }
+      }
+    ]
+  },
+  "thresholds": {
+    "elbow_flare_deg": 60,
+    "hip_sag_angle_min": 160,
+    "depth_elbow_angle_max": 95
+  },
+  "rep_counting": {
+    "phases": ["top", "descending", "bottom", "ascending"],
+    "rep_complete_transition": "ascending_to_top",
+    "bottom_position_criterion": "elbow_angle_below_100_degrees",
+    "top_position_criterion": "elbows_fully_extended"
+  },
+  "coaching_cues": {
+    "setup": "Hands shoulder-width apart, body in a straight line from heels to head",
+    "execution": "Keep your elbows at 45 degrees, lower until chest nearly touches the floor",
+    "good_rep": "Full range — great push-up",
+    "set_complete_no_flags": "Solid set. Great body position.",
+    "set_complete_with_flags": "Strong set. Next one, focus on {flag_cue}.",
+    "flag_cues": {
+      "elbow_flare": "Tuck your elbows in closer to your body",
+      "hip_sag": "Engage your core — keep your hips level",
+      "shallow_pushup": "Go a little lower — elbows to 90 degrees"
+    }
+  },
+  "contraindications": {
+    "shoulder_injury": {
+      "flag": true,
+      "modification": "Narrow your hand position and reduce depth. Try knee push-ups or an incline against a wall. Stop if you feel shoulder pain.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "back_injury": {
+      "flag": true,
+      "modification": "Brace your core hard to prevent hip sag, which loads the lower back. Try knee push-ups to reduce spinal demand.",
+      "show_on": ["exercise_detail"]
+    },
+    "hypertension": {
+      "flag": false,
+      "modification": "Avoid breath-holding. Breathe out as you press up.",
+      "show_on": ["exercise_detail"]
+    }
+  },
+  "model_assist": {
+    "enabled": false,
+    "feature_window_frames": 12,
+    "derived_features": ["left_elbow_angle", "right_elbow_angle", "torso_lean_deg", "symmetry", "tempo_ms", "range_of_motion"],
+    "notes": "Advisory only. May detect rule-less errors (e.g. uneven press, head drop, scapular winging). Cannot override rep count or safety flags. Default off until eval passes."
+  }
+}
