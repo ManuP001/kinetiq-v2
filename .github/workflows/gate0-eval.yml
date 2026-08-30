@@ -1,0 +1,56 @@
+# DRAFT — not yet wired to a real CI provider.
+#
+# This repo has no CI configured today (no other workflow files, no branch protection). This
+# file is the shape of the Stage-0 regression gate (EVAL_HARNESS_STAGE0_SPEC.md §10,
+# EVAL_STRATEGY.md §4) so it's ready to enable once this repo is actually connected to GitHub
+# Actions -- confirm the trigger branches, runner, and Python version against the real repo
+# setup before relying on it. Stdlib-only harness, so no dependency install step is needed.
+name: gate0-eval
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # nightly full gate + drift watch (EVAL_STRATEGY.md §6) -- adjust the hour once this is live.
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  # Fast gate: cheap assertions + rep-accuracy on the golden set, plus the scorer unit tests.
+  # Runs on every push/PR so it's part of the normal review loop, not a separate slow step.
+  fast-gate:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Unit tests (rep_match, form_pr, phantom, subject_lock, view, exercise_lib, golden loader)
+        run: python -m unittest discover -s evals/gate0 -p "test_*.py" -v
+      - name: Fast gate (assertions + rep-acc on golden subset)
+        run: python evals/gate0/aggregate.py --golden evals/gate0/golden --mode fast
+
+  # Full gate: + form precision/recall, subject-lock, view robustness. More expensive (label-based
+  # evals, Ch 39's "70/30 rule"), so it only runs on merge to main and nightly (drift watch).
+  full-gate:
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Full gate (+ form P/R + subject-lock + view)
+        run: python evals/gate0/aggregate.py --golden evals/gate0/golden --mode full | tee gate0-full-report.txt
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate0-full-report
+          path: gate0-full-report.txt
+
+# Block the merge if either job exits non-zero (EVAL_STRATEGY.md §4) -- once this is wired up,
+# add fast-gate (and full-gate, for the push/schedule triggers) as required status checks in
+# branch protection settings. Not configured yet; there is no branch protection on this repo.
