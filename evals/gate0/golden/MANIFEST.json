@@ -1,14 +1,25 @@
 {
   "schema_version": 1,
-  "golden_version": "synthetic-fixture-0.1",
+  "golden_version": "synthetic-fixture-0.2-stage1",
   "_synthetic_fixture": true,
-  "_note": "This entire golden set is SYNTHETIC fixture data (hand-authored, not recorded or PT-verified). It exists so scorers/*.py, golden_loader.py and 'aggregate.py --golden golden/ --mode full' run and pass end-to-end without real recordings. It is NOT the frozen v3.0 golden set required by EVAL_STRATEGY.md \u00a73 -- see golden/README.md before treating any number here as a real accuracy claim.",
+  "_note": "SYNTHETIC fixture data (hand-authored/parametrically generated, not recorded or PT-verified). Exists so scorers/*.py, golden_loader.py, detector/*.py and 'aggregate.py --golden golden/ --mode full' run and pass end-to-end without real recordings. NOT the frozen v3.0 golden set required by EVAL_STRATEGY.md \u00a73 -- see golden/README.md before treating any number here as a real accuracy claim.",
   "clips": [
     {
       "clip_id": "squat_bench_phantom_001",
       "exercise": "squat",
       "clip_type": "phantom_bench",
       "view": "diagonal",
+      "lighting": "daylight",
+      "fitness_level": null,
+      "num_people_in_frame": 0,
+      "labeler": "synthetic",
+      "pt_verified": false
+    },
+    {
+      "clip_id": "pushup_phantom_empty_001",
+      "exercise": "pushup",
+      "clip_type": "phantom_empty",
+      "view": "front",
       "lighting": "daylight",
       "fitness_level": null,
       "num_people_in_frame": 0,
@@ -27,6 +38,17 @@
       "pt_verified": false
     },
     {
+      "clip_id": "squat_badform_001",
+      "exercise": "squat",
+      "clip_type": "normal",
+      "view": "front",
+      "lighting": "daylight",
+      "fitness_level": "advanced",
+      "num_people_in_frame": 1,
+      "labeler": "synthetic",
+      "pt_verified": false
+    },
+    {
       "clip_id": "pushup_bystander_001",
       "exercise": "pushup",
       "clip_type": "bystander",
@@ -38,12 +60,34 @@
       "pt_verified": false
     },
     {
-      "clip_id": "squat_badform_001",
+      "clip_id": "squat_partial_depth_001",
       "exercise": "squat",
       "clip_type": "normal",
-      "view": "front",
+      "view": "side",
       "lighting": "daylight",
-      "fitness_level": "advanced",
+      "fitness_level": "beginner",
+      "num_people_in_frame": 1,
+      "labeler": "synthetic",
+      "pt_verified": false
+    },
+    {
+      "clip_id": "pushup_slow_tempo_001",
+      "exercise": "pushup",
+      "clip_type": "normal",
+      "view": "side",
+      "lighting": "indoor_evening",
+      "fitness_level": "intermediate",
+      "num_people_in_frame": 1,
+      "labeler": "synthetic",
+      "pt_verified": false
+    },
+    {
+      "clip_id": "lunge_clean_001",
+      "exercise": "lunge",
+      "clip_type": "normal",
+      "view": "side",
+      "lighting": "daylight",
+      "fitness_level": "intermediate",
       "num_people_in_frame": 1,
       "labeler": "synthetic",
       "pt_verified": false

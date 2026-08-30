@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "clip_id": "squat_partial_depth_001",
+  "exercise": "squat",
+  "clip_type": "normal",
+  "view": "side",
+  "lighting": "daylight",
+  "fitness_level": "beginner",
+  "subject": {
+    "expected": "user",
+    "num_people_in_frame": 1,
+    "subject_track_id": 0
+  },
+  "ground_truth": {
+    "actual_reps": 3,
+    "reps": [
+      {
+        "idx": 1,
+        "faults": [
+          "shallow_depth"
+        ]
+      },
+      {
+        "idx": 2,
+        "faults": [
+          "shallow_depth"
+        ]
+      },
+      {
+        "idx": 3,
+        "faults": [
+          "shallow_depth"
+        ]
+      }
+    ]
+  },
+  "synthetic": true
+}
