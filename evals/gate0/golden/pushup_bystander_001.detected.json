@@ -1,0 +1,11 @@
+{
+  "clip_id": "pushup_bystander_001",
+  "detector_version": "synthetic-fixture@0.1",
+  "detected_reps": 0,
+  "reps": [],
+  "subject_lock": {
+    "frames_total": 900,
+    "frames_on_expected_subject": 894
+  },
+  "coaching_cues": []
+}

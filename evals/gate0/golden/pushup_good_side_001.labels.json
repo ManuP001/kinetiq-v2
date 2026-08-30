@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "clip_id": "pushup_good_side_001",
+  "exercise": "pushup",
+  "clip_type": "normal",
+  "view": "side",
+  "lighting": "indoor_evening",
+  "fitness_level": "intermediate",
+  "subject": {
+    "expected": "user",
+    "num_people_in_frame": 1,
+    "subject_track_id": 0
+  },
+  "ground_truth": {
+    "actual_reps": 5,
+    "reps": [
+      {
+        "idx": 1,
+        "faults": []
+      },
+      {
+        "idx": 2,
+        "faults": []
+      },
+      {
+        "idx": 3,
+        "faults": []
+      },
+      {
+        "idx": 4,
+        "faults": []
+      },
+      {
+        "idx": 5,
+        "faults": []
+      }
+    ]
+  },
+  "synthetic": true
+}

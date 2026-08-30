@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "clip_id": "pushup_bystander_001",
+  "exercise": "pushup",
+  "clip_type": "bystander",
+  "view": "front",
+  "lighting": "dim_room",
+  "fitness_level": "beginner",
+  "subject": {
+    "expected": "user",
+    "num_people_in_frame": 2,
+    "subject_track_id": 0
+  },
+  "ground_truth": {
+    "actual_reps": 0,
+    "reps": []
+  },
+  "synthetic": true
+}
