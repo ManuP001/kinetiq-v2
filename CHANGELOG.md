@@ -5,7 +5,68 @@ Format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
-## [0.3.0] — 2026-07-19 — Gate 0 bug fixes, eval harness, config.py
+## [0.4.0] — 2026-08-30 — v3 Stage 1: subject-lock + rep-validity gate detector
+
+Kinetiq v3's Stage 1 (`../kinetiq v3/VISION_ARCHITECTURE.md`, `ROADMAP.md`): the offline,
+deterministic, keypoints-only reference detector that kills the two worst field failures --
+a moving bench counting reps (RC2) and the skeleton jumping to a bystander (RC1). Lives in
+`evals/gate0/detector/`; measured by the Stage-0 harness (`evals/gate0/`, added in the v3 work
+this entry follows).
+
+### Added
+
+- `detector/subject_lock.py` -- picks one subject at session start (config: largest bbox /
+  most-central), tracks that identity by track_id with position-based re-identification when the
+  stream's own ids are unstable, and PAUSES (never silently retargets) after
+  `SUBJECT_LOST_FRAMES_THRESHOLD` consecutive missed frames.
+- `detector/plausibility.py` -- the Stage-3 rep-validity gate's human-plausibility check
+  (visible-landmark fraction + shin:thigh limb-ratio band). Independent of subject-lock: a
+  false-positive person box (e.g. a bench) can be locked onto, but every frame of it is still
+  rejected here.
+- `detector/rep_counter.py` -- a median-smoothed, hysteresis-gated valley-detection FSM over the
+  exercise's primary joint angle, with a minimum-excursion floor (noise vs. a real rep attempt)
+  and a plausible-tempo band (`MIN_REP_DURATION_MS`/`MAX_REP_DURATION_MS` -- a slow 3-0-1-0 rep
+  must still register). Depth is graded (partial reps count, at a lower score), not thresholded.
+- `detector/faults.py`, `detector/exercise_signals.py`, `detector/keypoint_map.py` -- the
+  existing deterministic form-flag rules transliterated from each exercise's own
+  `common_errors[].keypoint_signature.rule` string (unchanged semantics -- Stage 1 doesn't tune
+  or add fault logic, that's Stage 4/5), plus the COCO-17/BlazePose-33 keypoint-name mapping the
+  Stage-0 spec flagged as missing (scoped to the landmarks squat/pushup/lunge actually need).
+- `detector/adapter.py` -- `run_detector(keypoints_stream, exercise_id, config) -> DetectedClip`,
+  the offline detector adapter deferred by `EVAL_HARNESS_STAGE0_SPEC.md` §12. Deterministic (same
+  input -> same output); never sees golden-set ground truth. Subject-lock accuracy against a
+  clip's *expected* subject is graded separately, by the harness
+  (`score_subject_lock_against_expected`) -- a real detector has no "expected" identity to cheat
+  from, only the one it locked onto.
+- `backend/app/core/config.py` -- Stage-1 gate floors/tunables (subject-lock selection rule and
+  thresholds, plausibility thresholds, tempo band, rep-counter smoothing/hysteresis/excursion,
+  graded-depth scoring). Single source of truth, imported via `gate_config.py` like the Stage-0
+  floors.
+
+### Changed
+
+- `evals/gate0/golden_loader.py`: `detected.json` is now RECOMPUTED from frozen keypoints via
+  `run_detector` for any exercise Stage 1 supports (squat/pushup/lunge) -- reproducible, not
+  hand-authored or live-captured. Falls back to reading a pre-existing `<clip_id>.detected.json`
+  only for an exercise the detector doesn't support yet (none currently in the golden set; kept
+  for a future Tier A/B/C clip added before its own detector logic lands).
+- `evals/gate0/golden/`: the synthetic fixture's keypoints were regenerated with real,
+  angle-driving motion (the Stage-0 fixture's near-constant dummy values didn't exercise a real
+  phase signal) and extended with the clips Stage 1's exit gate needs:
+  `pushup_phantom_empty_001` (nobody in frame, distinct from the bench-misdetection story),
+  `squat_partial_depth_001` (graded, still-counted shallow reps), `pushup_slow_tempo_001` (a
+  deliberately slow rep). `squat_bench_phantom_001` now models the actual failure mode -- a
+  low-confidence, implausible "person" detection -- rather than an empty frame.
+
+### Verified (Stage 1 exit gate, `ROADMAP.md`)
+
+On the synthetic golden set via `python aggregate.py --golden golden/ --mode full`: 0 reps on
+`phantom_bench`/`phantom_empty`/`bystander` clips; 100% subject-lock on the multi-person clip
+(floor 99%); rep-count accuracy 100% on squat and pushup (matching the Stage-0 baseline, which
+was hand-authored to already equal ground truth -- Stage 1's 100% is the same number now produced
+by an actual algorithm reading keypoints, not restated fiction) and 100% on lunge (no Stage-0
+baseline existed for it). `run_detector` is deterministic (unit-tested); 131 unit tests pass
+across `evals/gate0/`.
 
 ### Fixed — kinetiq-demo2/index.html
 
