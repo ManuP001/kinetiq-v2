@@ -2,16 +2,18 @@
 """
 evals/gate0/golden_loader.py
 
-Loads and validates the frozen Stage-0 golden set (EVAL_HARNESS_STAGE0_SPEC.md §3-5): the
-MANIFEST.json index, each clip's <clip_id>.labels.json (frozen ground truth) and
-<clip_id>.keypoints.jsonl (frozen input), plus its <clip_id>.detected.json.
+Loads and validates the frozen golden set (EVAL_HARNESS_STAGE0_SPEC.md §3-5): the MANIFEST.json
+index, each clip's <clip_id>.labels.json (frozen ground truth) and <clip_id>.keypoints.jsonl
+(frozen input).
 
-detected.json bootstrap note (spec §5, §12): re-running a detector offline over frozen
-keypoints.jsonl needs the Stage-1 detector adapter, which is out of scope here. Stage 0 instead
-reads a pre-existing <clip_id>.detected.json per clip -- captured live during recording for a
-real golden clip, or hand-authored for the synthetic fixture shipped with this harness
-(golden/README.md). A real offline detector run will overwrite these in Stage 1; nothing here
-treats detected.json as frozen truth the way labels.json and keypoints.jsonl are.
+detected.json provenance (spec §5, §12; Stage 1 changes this from Stage 0): for any exercise the
+Stage-1 reference detector supports (detector.adapter.run_detector), detected output is now
+RECOMPUTED from the frozen keypoints on every load -- reproducible, and no longer a hand-authored
+or live-captured file on disk. For an exercise the detector doesn't support yet (nothing in the
+current golden set, but a future Tier A/B/C clip could exist before its own detector logic
+lands), this falls back to reading a pre-existing <clip_id>.detected.json, exactly as Stage 0 did
+-- "keep the bootstrap as a fallback". Either way, detected.json is never frozen truth the way
+labels.json and keypoints.jsonl are.
 
 Run standalone as a lint check:  python golden_loader.py <golden_dir>
 """
@@ -24,6 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import exercise_lib
+from detector.adapter import run_detector, score_subject_lock_against_expected
 
 VALID_CLIP_TYPES = ("normal", "phantom_bench", "phantom_empty", "bystander")
 PHANTOM_LIKE_CLIP_TYPES = ("phantom_bench", "phantom_empty", "bystander")
@@ -52,6 +55,7 @@ class GoldenClip:
     coaching_cues: List[Dict[str, Any]]
     pose_model: Optional[str]
     keypoints_path: Path
+    detector_source: str  # "run_detector" (reproducible) or "bootstrap" (pre-existing file)
 
 
 def _read_json(path: Path, clip_id: str) -> Any:
@@ -64,15 +68,16 @@ def _read_json(path: Path, clip_id: str) -> Any:
             raise GoldenSetError(f"{clip_id}: {path.name} is not valid JSON: {exc}") from exc
 
 
-def _validate_keypoints_file(clip_id: str, path: Path) -> Optional[str]:
+def _load_and_validate_keypoints(clip_id: str, path: Path) -> tuple:
     """Validate the frozen-input schema (spec §5): every frame has t_ms/pose_model/people, kp
-    points are variable-length [x, y, z, vis] with z nullable. Returns the pose_model named by
-    the first frame (frame-level pose_model can vary in principle; Stage 0 just needs one to
-    label the clip -- per-frame model switches are not expected in a single recording)."""
+    points are variable-length [x, y, z, vis] with z nullable. Returns (pose_model, frames) --
+    the pose_model named by the first frame (frame-level pose_model can vary in principle, but a
+    single recording isn't expected to switch models mid-clip) and the fully parsed frame list,
+    ready to feed to run_detector without re-reading the file."""
     if not path.is_file():
         raise GoldenSetError(f"{clip_id}: missing required file {path.name}")
     pose_model: Optional[str] = None
-    saw_frame = False
+    frames: List[Dict[str, Any]] = []
     with path.open(encoding="utf-8") as f:
         for lineno, line in enumerate(f, start=1):
             line = line.strip()
@@ -102,10 +107,27 @@ def _validate_keypoints_file(clip_id: str, path: Path) -> Optional[str]:
                         )
             if pose_model is None:
                 pose_model = frame["pose_model"]
-            saw_frame = True
-    if not saw_frame:
+            frames.append(frame)
+    if not frames:
         raise GoldenSetError(f"{clip_id}: {path.name} has no frames")
-    return pose_model
+    return pose_model, frames
+
+
+def _load_detected(
+    clip_id: str, golden_dir: Path, frames: List[Dict[str, Any]], exercise: str, expected_track_id: Optional[int]
+) -> tuple:
+    """Returns (detected_dict, source) where detected_dict has the same shape as a hand-authored
+    detected.json ({detected_reps, reps, subject_lock, coaching_cues}) and source is
+    "run_detector" or "bootstrap" (see module docstring)."""
+    try:
+        detected_clip = run_detector(frames, exercise)
+    except KeyError:
+        detected = _read_json(golden_dir / f"{clip_id}.detected.json", clip_id)
+        return detected, "bootstrap"
+
+    result = detected_clip.to_dict()
+    result["subject_lock"] = score_subject_lock_against_expected(detected_clip, expected_track_id)
+    return result, "run_detector"
 
 
 def load_golden(golden_dir: Path) -> List[GoldenClip]:
@@ -121,9 +143,8 @@ def load_golden(golden_dir: Path) -> List[GoldenClip]:
     for row in manifest.get("clips", []):
         clip_id = row["clip_id"]
         labels = _read_json(golden_dir / f"{clip_id}.labels.json", clip_id)
-        detected = _read_json(golden_dir / f"{clip_id}.detected.json", clip_id)
         keypoints_path = golden_dir / f"{clip_id}.keypoints.jsonl"
-        pose_model = _validate_keypoints_file(clip_id, keypoints_path)
+        pose_model, frames = _load_and_validate_keypoints(clip_id, keypoints_path)
 
         exercise = labels["exercise"]
         clip_type = labels["clip_type"]
@@ -159,6 +180,11 @@ def load_golden(golden_dir: Path) -> List[GoldenClip]:
                 f"(EVAL_HARNESS_STAGE0_SPEC.md §5)"
             )
 
+        subject = labels.get("subject", {})
+        detected, detector_source = _load_detected(
+            clip_id, golden_dir, frames, exercise, subject.get("subject_track_id")
+        )
+
         det_reps = detected.get("reps", [])
         for rep in det_reps:
             for flag in rep.get("flags", []):
@@ -168,7 +194,6 @@ def load_golden(golden_dir: Path) -> List[GoldenClip]:
                         f"defined in {exercise!r}'s exercise-library entry"
                     )
 
-        subject = labels.get("subject", {})
         clips.append(
             GoldenClip(
                 clip_id=clip_id,
@@ -187,6 +212,7 @@ def load_golden(golden_dir: Path) -> List[GoldenClip]:
                 coaching_cues=detected.get("coaching_cues", []),
                 pose_model=pose_model,
                 keypoints_path=keypoints_path,
+                detector_source=detector_source,
             )
         )
     return clips
