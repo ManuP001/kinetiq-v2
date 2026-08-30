@@ -131,6 +131,63 @@ FORM_RECALL_FLOOR_MED_SEV: float = 0.70
 
 VIEW_ACC_MAX_GAP: float = 0.10            # max rep-acc spread across front/side/diagonal
 
+# ─── Stage 1 detector: subject-lock (VISION_ARCHITECTURE.md Stage 1, fixes RC1) ──
+# How the offline reference detector (evals/gate0/detector/) picks the initial locked subject
+# when multiple people are visible at session start, and how it decides "lost" vs "still the same
+# person returning after a blip". Never re-hardcode in detector code — import from here.
+SUBJECT_SELECTION_RULE: str = "largest_bbox"  # "largest_bbox" | "most_central"
+# Consecutive frames without a plausible match to the locked identity before the detector
+# declares the subject lost and PAUSES rep counting (VISION_ARCHITECTURE.md: "pause, don't
+# silently retarget"). ~0.3s at a nominal 30fps clip: long enough to ride out a single dropped
+# detection / brief occlusion blip, short enough that a real disappearance is caught quickly.
+# Reference-detector default -- revisit once real drop-out statistics exist from field data.
+SUBJECT_LOST_FRAMES_THRESHOLD: int = 10
+# Normalized [0,1] frame-fraction distance: how close a newly-detected person's bbox centroid
+# must be to the locked subject's last-known centroid to be accepted as "the same person
+# returning" rather than "a different person happens to be nearby". Deliberately tight -- the
+# whole point of subject-lock is to never retarget to whoever is merely next-most-prominent.
+SUBJECT_REID_MAX_CENTROID_DIST: float = 0.15
+
+# ─── Stage 1 detector: rep-validity gate (VISION_ARCHITECTURE.md Stage 3, fixes RC2) ──
+# A landmark below this visibility doesn't count as "seen" for plausibility/angle purposes.
+MIN_KEYPOINT_VISIBILITY: float = 0.5
+# Fraction of the detector's scoped landmark set (shoulders/elbows/wrists/hips/knees/ankles --
+# see detector/keypoint_map.py) that must be visible for a frame to be treated as a plausible
+# human at all. Below this: reject the frame outright (e.g. a heavily-occluded or non-human blob
+# such as a bench mistaken for a person by an upstream detector).
+MIN_VISIBLE_KEYPOINT_FRACTION: float = 0.6
+# A plausible human's shin length (knee->ankle) vs thigh length (hip->knee) falls in this ratio
+# band (real humans run roughly 0.9-1.1; this is deliberately generous to avoid false rejections
+# from ordinary pose noise while still catching wildly wrong geometry).
+HUMAN_LIMB_RATIO_MIN: float = 0.5
+HUMAN_LIMB_RATIO_MAX: float = 2.0
+# Plausible tempo band for one full rep cycle. Below MIN: too fast to be a real human rep (motion
+# jitter). Above MAX: not one continuous rep (e.g. drifted or paused mid-motion). MAX is
+# deliberately generous -- EVAL_STRATEGY.md case #6 requires a slow (3-0-1-0 tempo) rep to still
+# register.
+MIN_REP_DURATION_MS: int = 400
+MAX_REP_DURATION_MS: int = 12000
+
+# ─── Stage 1 detector: rep counter (VISION_ARCHITECTURE.md Stage 4, fixes RC4/RC6) ──
+# Median-filter window (frames) over the primary joint-angle signal (knee angle for
+# squat/lunge, elbow angle for pushup) before phase/valley detection, to absorb per-frame pose
+# jitter.
+REP_COUNTER_SMOOTHING_WINDOW_FRAMES: int = 5
+# A phase reversal must clear this margin (degrees) before it's accepted as a genuine
+# direction change, so noise near a local extremum doesn't register as multiple micro-reps.
+REP_COUNTER_HYSTERESIS_DEG: float = 5.0
+# Near-full-extension angle treated as "top" phase for knee/elbow-angle-driven exercises.
+REP_COUNTER_TOP_ANGLE_DEG: float = 160.0
+# An excursion (top angle - local minimum) smaller than this is fidget/noise, not a rep attempt --
+# it must not count at all (this is the floor below "partial", not a partial-rep bar itself).
+REP_MIN_EXCURSION_DEG: float = 20.0
+# A countable-but-very-shallow rep still gets at least this form_score out of 10 rather than 0 --
+# "counts with a lower score" (graded depth), not punished as if it were a fault-ridden rep.
+GRADED_DEPTH_FORM_SCORE_FLOOR: float = 3.0
+# Flat, deterministic form_score deduction per triggered fault flag on a rep (Stage-4's learned
+# model replaces this with a calibrated score; this is the Stage-1 placeholder).
+FORM_SCORE_PENALTY_PER_FLAG: float = 2.5
+
 # ─── Exercise library loader (CLAUDE.md §6) ───────────────────────────────────────
 # kinetiq-v2/backend/app/core/config.py -> parents[3] == kinetiq-v2/
 EXERCISE_LIBRARY_DIR: Path = Path(__file__).resolve().parents[3] / "exercises"
