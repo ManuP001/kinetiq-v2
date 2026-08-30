@@ -113,6 +113,24 @@ FREE_TIER_EXERCISE_IDS: tuple[str, ...] = ("squat", "pushup", "lunge")
 # Also imported by evals/gate0/aggregate.py so both share one source of truth.
 GATE0_TARGET_ACCURACY: float = 0.90
 
+# ─── Stage 0 eval gate floors (EVAL_HARNESS_STAGE0_SPEC.md §8) ───────────────────
+# Single source of truth for the Stage-0 eval harness gate. Imported by
+# evals/gate0/aggregate.py (like GATE0_TARGET_ACCURACY) — never re-hardcode these numbers in the
+# harness or the spec docs; reference them by name.
+PHANTOM_REPS_MUST_BE_ZERO: bool = True    # any rep on a phantom/empty clip -> hard fail
+SUBJECT_LOCK_FLOOR: float = 0.99          # min fraction of frames tracking the right person
+
+# Form flags are graded by fault severity (EXERCISE_LIBRARY.md §4: high | med | low).
+# Precision floors guard against false accusations; high-severity must never accuse a good rep.
+FORM_PRECISION_FLOOR_HIGH_SEV: float = 0.90
+FORM_PRECISION_FLOOR_MED_SEV: float = 0.75
+# Recall floors are precision-first: high-severity tolerates MORE misses (a lower recall bar) so it
+# can hold its strict precision floor without over-flagging. low-severity has no enforced floor.
+FORM_RECALL_FLOOR_HIGH_SEV: float = 0.60
+FORM_RECALL_FLOOR_MED_SEV: float = 0.70
+
+VIEW_ACC_MAX_GAP: float = 0.10            # max rep-acc spread across front/side/diagonal
+
 # ─── Exercise library loader (CLAUDE.md §6) ───────────────────────────────────────
 # kinetiq-v2/backend/app/core/config.py -> parents[3] == kinetiq-v2/
 EXERCISE_LIBRARY_DIR: Path = Path(__file__).resolve().parents[3] / "exercises"
