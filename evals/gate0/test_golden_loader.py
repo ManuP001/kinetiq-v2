@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from golden_loader import GoldenSetError, _load_detected, load_golden  # noqa: E402
+from golden_loader import GoldenSetError, _load_detected, load_golden, load_golden_poses  # noqa: E402
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "golden"
 
@@ -78,6 +78,59 @@ class TestLoadGoldenOnFixture(unittest.TestCase):
         by_id = {c.clip_id: c for c in clips}
         clip = by_id["squat_partial_depth_001"]
         self.assertEqual(clip.detected_reps, clip.actual_reps)
+
+
+class TestLoadGoldenPoses(unittest.TestCase):
+    """Stage 2: golden/poses/<model>/squat_bakeoff_side_001.keypoints.jsonl, one clip captured
+    under all 3 candidate pose models, sharing the single model-independent labels.json
+    (GOLDEN_SET_PROTOCOL.md §2)."""
+
+    def test_unknown_pose_model_returns_empty_list(self):
+        self.assertEqual(load_golden_poses(FIXTURE_DIR, "some_future_model"), [])
+
+    def test_loads_the_bakeoff_clip_for_each_candidate_model(self):
+        for pose_model in ("blazepose_33", "movenet_17", "rtmpose_halpe26"):
+            clips = load_golden_poses(FIXTURE_DIR, pose_model)
+            self.assertEqual(len(clips), 1, pose_model)
+            self.assertEqual(clips[0].clip_id, "squat_bakeoff_side_001")
+            self.assertEqual(clips[0].pose_model, pose_model)
+
+    def test_flat_layout_clips_are_not_picked_up(self):
+        # squat_badform_001 etc. only exist as flat golden/<clip_id>.keypoints.jsonl -- they
+        # must not leak into a poses/<model>/ result just because they share a golden_dir.
+        clips = load_golden_poses(FIXTURE_DIR, "blazepose_33")
+        clip_ids = {c.clip_id for c in clips}
+        self.assertNotIn("squat_badform_001", clip_ids)
+
+    def test_run_detector_output_is_identical_across_models_for_equivalent_skeletons(self):
+        by_model = {
+            pose_model: load_golden_poses(FIXTURE_DIR, pose_model)[0]
+            for pose_model in ("blazepose_33", "movenet_17", "rtmpose_halpe26")
+        }
+        reference = by_model["movenet_17"]
+        for pose_model, clip in by_model.items():
+            self.assertEqual(clip.detected_reps, reference.detected_reps, pose_model)
+            self.assertEqual(clip.det_reps, reference.det_reps, pose_model)
+
+    def test_pose_model_directory_frame_mismatch_raises(self):
+        tmpdir = Path(tempfile.mkdtemp())
+        try:
+            shutil.copy(
+                FIXTURE_DIR / "squat_bakeoff_side_001.labels.json",
+                tmpdir / "squat_bakeoff_side_001.labels.json",
+            )
+            wrong_dir = tmpdir / "poses" / "movenet_17"
+            wrong_dir.mkdir(parents=True)
+            # copy blazepose_33's file (declares pose_model "blazepose_33") into the movenet_17
+            # directory -- a directory/frame mismatch.
+            shutil.copy(
+                FIXTURE_DIR / "poses" / "blazepose_33" / "squat_bakeoff_side_001.keypoints.jsonl",
+                wrong_dir / "squat_bakeoff_side_001.keypoints.jsonl",
+            )
+            with self.assertRaises(GoldenSetError):
+                load_golden_poses(tmpdir, "movenet_17")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 class TestLoadDetectedFallback(unittest.TestCase):

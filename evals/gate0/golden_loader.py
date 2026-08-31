@@ -68,12 +68,33 @@ def _read_json(path: Path, clip_id: str) -> Any:
             raise GoldenSetError(f"{clip_id}: {path.name} is not valid JSON: {exc}") from exc
 
 
+def validate_frame_schema(frame: Dict[str, Any], context: str) -> None:
+    """The frozen-input frame schema (EVAL_HARNESS_STAGE0_SPEC.md §5): t_ms/pose_model/people
+    required, kp points are variable-length [x, y, z, vis] with z nullable. Shared by this
+    loader (parsing committed keypoints.jsonl lines) and detector/pose_capture/ (validating a
+    freshly-inferred frame before it's ever written to disk) -- one set of rules, not two
+    independently-maintained copies. Raises ValueError, not GoldenSetError: pose_capture output
+    isn't part of a golden set yet when this runs on it."""
+    for required in ("t_ms", "pose_model", "people"):
+        if required not in frame:
+            raise ValueError(f"{context}: missing required field {required!r}")
+    for person in frame["people"]:
+        if "track_id" not in person or "kp" not in person:
+            raise ValueError(f"{context}: person entry missing track_id/kp")
+        for point in person["kp"]:
+            if len(point) != 4:
+                raise ValueError(
+                    f"{context}: keypoint {point!r} must be [x, y, z, vis] "
+                    f"(z nullable for 2D-only pose models)"
+                )
+
+
 def _load_and_validate_keypoints(clip_id: str, path: Path) -> tuple:
-    """Validate the frozen-input schema (spec §5): every frame has t_ms/pose_model/people, kp
-    points are variable-length [x, y, z, vis] with z nullable. Returns (pose_model, frames) --
-    the pose_model named by the first frame (frame-level pose_model can vary in principle, but a
-    single recording isn't expected to switch models mid-clip) and the fully parsed frame list,
-    ready to feed to run_detector without re-reading the file."""
+    """Validate the frozen-input schema (spec §5) for every line of a committed keypoints.jsonl.
+    Returns (pose_model, frames) -- the pose_model named by the first frame (frame-level
+    pose_model can vary in principle, but a single recording isn't expected to switch models
+    mid-clip) and the fully parsed frame list, ready to feed to run_detector without re-reading
+    the file."""
     if not path.is_file():
         raise GoldenSetError(f"{clip_id}: missing required file {path.name}")
     pose_model: Optional[str] = None
@@ -89,22 +110,10 @@ def _load_and_validate_keypoints(clip_id: str, path: Path) -> tuple:
                 raise GoldenSetError(
                     f"{clip_id}: {path.name}:{lineno} invalid JSON: {exc}"
                 ) from exc
-            for required in ("t_ms", "pose_model", "people"):
-                if required not in frame:
-                    raise GoldenSetError(
-                        f"{clip_id}: {path.name}:{lineno} missing required field {required!r}"
-                    )
-            for person in frame["people"]:
-                if "track_id" not in person or "kp" not in person:
-                    raise GoldenSetError(
-                        f"{clip_id}: {path.name}:{lineno} person entry missing track_id/kp"
-                    )
-                for point in person["kp"]:
-                    if len(point) != 4:
-                        raise GoldenSetError(
-                            f"{clip_id}: {path.name}:{lineno} keypoint {point!r} must be "
-                            f"[x, y, z, vis] (z nullable for 2D-only pose models)"
-                        )
+            try:
+                validate_frame_schema(frame, context=f"{path.name}:{lineno}")
+            except ValueError as exc:
+                raise GoldenSetError(f"{clip_id}: {exc}") from exc
             if pose_model is None:
                 pose_model = frame["pose_model"]
             frames.append(frame)
@@ -130,92 +139,148 @@ def _load_detected(
     return result, "run_detector"
 
 
-def load_golden(golden_dir: Path) -> List[GoldenClip]:
-    golden_dir = Path(golden_dir)
-    manifest = _read_json(golden_dir / "MANIFEST.json", clip_id="MANIFEST")
-
+def _load_severities() -> Dict[str, Dict[str, str]]:
     try:
-        severities = exercise_lib.load_fault_severities()
+        return exercise_lib.load_fault_severities()
     except exercise_lib.ExerciseLibraryError as exc:
         raise GoldenSetError(f"exercise library failed validation: {exc}") from exc
+
+
+def _load_clip(
+    clip_id: str,
+    golden_dir: Path,
+    keypoints_path: Path,
+    severities: Dict[str, Dict[str, str]],
+) -> GoldenClip:
+    """The full per-clip load+validate pipeline, shared by load_golden (flat keypoints.jsonl,
+    MANIFEST-driven) and load_golden_poses (Stage 2: golden/poses/<model>/, discovered by
+    directory scan) -- see each function's docstring for what differs between them."""
+    labels = _read_json(golden_dir / f"{clip_id}.labels.json", clip_id)
+    pose_model, frames = _load_and_validate_keypoints(clip_id, keypoints_path)
+
+    exercise = labels["exercise"]
+    clip_type = labels["clip_type"]
+    if clip_type not in VALID_CLIP_TYPES:
+        raise GoldenSetError(
+            f"{clip_id}: unknown clip_type {clip_type!r}, must be one of {VALID_CLIP_TYPES}"
+        )
+    view = labels.get("view")
+    if view is not None and view not in VALID_VIEWS:
+        raise GoldenSetError(f"{clip_id}: unknown view {view!r}, must be one of {VALID_VIEWS}")
+
+    if exercise not in severities:
+        raise GoldenSetError(f"{clip_id}: exercise {exercise!r} is not in the exercise library")
+    ex_severities = severities[exercise]
+
+    ground_truth = labels.get("ground_truth", {})
+    actual_reps = ground_truth.get("actual_reps", 0)
+    gt_reps = ground_truth.get("reps", [])
+
+    for rep in gt_reps:
+        for fault in rep.get("faults", []):
+            if fault not in ex_severities:
+                raise GoldenSetError(
+                    f"{clip_id}: fault {fault!r} on gt rep {rep.get('idx')} is not defined "
+                    f"in {exercise!r}'s exercise-library entry"
+                )
+
+    if clip_type in PHANTOM_LIKE_CLIP_TYPES and actual_reps != 0:
+        raise GoldenSetError(
+            f"{clip_id}: clip_type {clip_type!r} must have ground_truth.actual_reps == 0 "
+            f"(EVAL_HARNESS_STAGE0_SPEC.md §5)"
+        )
+
+    subject = labels.get("subject", {})
+    detected, detector_source = _load_detected(
+        clip_id, golden_dir, frames, exercise, subject.get("subject_track_id")
+    )
+
+    det_reps = detected.get("reps", [])
+    for rep in det_reps:
+        for flag in rep.get("flags", []):
+            if flag not in ex_severities:
+                raise GoldenSetError(
+                    f"{clip_id}: detected flag {flag!r} on rep {rep.get('idx')} is not "
+                    f"defined in {exercise!r}'s exercise-library entry"
+                )
+
+    return GoldenClip(
+        clip_id=clip_id,
+        exercise=exercise,
+        clip_type=clip_type,
+        view=view,
+        lighting=labels.get("lighting"),
+        fitness_level=labels.get("fitness_level"),
+        subject_num_people_in_frame=subject.get("num_people_in_frame"),
+        subject_track_id=subject.get("subject_track_id"),
+        actual_reps=actual_reps,
+        gt_reps=gt_reps,
+        detected_reps=detected.get("detected_reps", 0),
+        det_reps=det_reps,
+        subject_lock=detected.get("subject_lock"),
+        coaching_cues=detected.get("coaching_cues", []),
+        pose_model=pose_model,
+        keypoints_path=keypoints_path,
+        detector_source=detector_source,
+    )
+
+
+def load_golden(golden_dir: Path) -> List[GoldenClip]:
+    """The Stage-0/1 path: MANIFEST-driven, one flat <clip_id>.keypoints.jsonl per clip
+    (--data/--mode fast|full). Unchanged by Stage 2 -- see load_golden_poses for the bake-off."""
+    golden_dir = Path(golden_dir)
+    manifest = _read_json(golden_dir / "MANIFEST.json", clip_id="MANIFEST")
+    severities = _load_severities()
 
     clips: List[GoldenClip] = []
     for row in manifest.get("clips", []):
         clip_id = row["clip_id"]
-        labels = _read_json(golden_dir / f"{clip_id}.labels.json", clip_id)
         keypoints_path = golden_dir / f"{clip_id}.keypoints.jsonl"
-        pose_model, frames = _load_and_validate_keypoints(clip_id, keypoints_path)
-
-        exercise = labels["exercise"]
-        clip_type = labels["clip_type"]
-        if clip_type not in VALID_CLIP_TYPES:
-            raise GoldenSetError(
-                f"{clip_id}: unknown clip_type {clip_type!r}, must be one of {VALID_CLIP_TYPES}"
-            )
-        view = labels.get("view")
-        if view is not None and view not in VALID_VIEWS:
-            raise GoldenSetError(f"{clip_id}: unknown view {view!r}, must be one of {VALID_VIEWS}")
-
-        if exercise not in severities:
-            raise GoldenSetError(
-                f"{clip_id}: exercise {exercise!r} is not in the exercise library"
-            )
-        ex_severities = severities[exercise]
-
-        ground_truth = labels.get("ground_truth", {})
-        actual_reps = ground_truth.get("actual_reps", 0)
-        gt_reps = ground_truth.get("reps", [])
-
-        for rep in gt_reps:
-            for fault in rep.get("faults", []):
-                if fault not in ex_severities:
-                    raise GoldenSetError(
-                        f"{clip_id}: fault {fault!r} on gt rep {rep.get('idx')} is not defined "
-                        f"in {exercise!r}'s exercise-library entry"
-                    )
-
-        if clip_type in PHANTOM_LIKE_CLIP_TYPES and actual_reps != 0:
-            raise GoldenSetError(
-                f"{clip_id}: clip_type {clip_type!r} must have ground_truth.actual_reps == 0 "
-                f"(EVAL_HARNESS_STAGE0_SPEC.md §5)"
-            )
-
-        subject = labels.get("subject", {})
-        detected, detector_source = _load_detected(
-            clip_id, golden_dir, frames, exercise, subject.get("subject_track_id")
-        )
-
-        det_reps = detected.get("reps", [])
-        for rep in det_reps:
-            for flag in rep.get("flags", []):
-                if flag not in ex_severities:
-                    raise GoldenSetError(
-                        f"{clip_id}: detected flag {flag!r} on rep {rep.get('idx')} is not "
-                        f"defined in {exercise!r}'s exercise-library entry"
-                    )
-
-        clips.append(
-            GoldenClip(
-                clip_id=clip_id,
-                exercise=exercise,
-                clip_type=clip_type,
-                view=view,
-                lighting=labels.get("lighting"),
-                fitness_level=labels.get("fitness_level"),
-                subject_num_people_in_frame=subject.get("num_people_in_frame"),
-                subject_track_id=subject.get("subject_track_id"),
-                actual_reps=actual_reps,
-                gt_reps=gt_reps,
-                detected_reps=detected.get("detected_reps", 0),
-                det_reps=det_reps,
-                subject_lock=detected.get("subject_lock"),
-                coaching_cues=detected.get("coaching_cues", []),
-                pose_model=pose_model,
-                keypoints_path=keypoints_path,
-                detector_source=detector_source,
-            )
-        )
+        clips.append(_load_clip(clip_id, golden_dir, keypoints_path, severities))
     return clips
+
+
+def load_golden_poses(golden_dir: Path, pose_model: str) -> List[GoldenClip]:
+    """Stage 2 (--compare-pose-models): load every clip that has frozen keypoints for
+    `pose_model` under golden/poses/<pose_model>/ (GOLDEN_SET_PROTOCOL.md §2), cross-referencing
+    the SAME model-independent <clip_id>.labels.json every pose model shares (ground truth
+    doesn't change with the model under test). Discovered by scanning the poses/ directory
+    directly, independent of MANIFEST.json's main clip list -- a bake-off-only clip doesn't need
+    a flat top-level keypoints.jsonl, which load_golden (and --mode fast/full) still requires and
+    this function never touches. Returns [] if no clips exist for this pose model yet."""
+    golden_dir = Path(golden_dir)
+    poses_dir = golden_dir / "poses" / pose_model
+    if not poses_dir.is_dir():
+        return []
+    severities = _load_severities()
+
+    suffix = ".keypoints.jsonl"
+    clips: List[GoldenClip] = []
+    for keypoints_path in sorted(poses_dir.glob(f"*{suffix}")):
+        clip_id = keypoints_path.name[: -len(suffix)]
+        clip = _load_clip(clip_id, golden_dir, keypoints_path, severities)
+        if clip.pose_model != pose_model:
+            raise GoldenSetError(
+                f"{clip_id}: keypoints under poses/{pose_model}/ declare pose_model "
+                f"{clip.pose_model!r} -- directory/frame mismatch"
+            )
+        clips.append(clip)
+    return clips
+
+
+def load_capture_meta(golden_dir: Path, pose_model: str, clip_id: str) -> Optional[Dict[str, Any]]:
+    """Optional per-(model, clip) capture stats -- avg_latency_ms_per_frame, capture_env,
+    frames_captured -- written by detector/pose_capture/ next to the keypoints it produced
+    (golden/poses/<model>/<clip_id>.capture_meta.json). Not part of the frozen schema
+    (EVAL_HARNESS_STAGE0_SPEC.md §5 doesn't define it) and never required: a hand-authored or
+    synthetic clip simply has none, and callers (aggregate.py's --compare-pose-models table)
+    must treat that as "n/a", not an error. Latency here is capture-machine wall-clock, NOT
+    on-device -- see its capture_env field for what actually produced it."""
+    path = golden_dir / "poses" / pose_model / f"{clip_id}.capture_meta.json"
+    if not path.is_file():
+        return None
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
 
 
 def _main() -> int:
