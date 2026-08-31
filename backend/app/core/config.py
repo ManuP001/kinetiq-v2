@@ -188,6 +188,50 @@ GRADED_DEPTH_FORM_SCORE_FLOOR: float = 3.0
 # model replaces this with a calibrated score; this is the Stage-1 placeholder).
 FORM_SCORE_PENALTY_PER_FLAG: float = 2.5
 
+# ─── Stage 2 pose-model bake-off (VISION_ARCHITECTURE.md Stage 2 / §5, ROADMAP.md Stage 2) ──
+# Single source of truth for which pose models the bake-off compares -- both
+# evals/gate0/detector/pose_capture/ (which candidate to capture) and aggregate.py's
+# --compare-pose-models table iterate this registry. No model name/weights/runtime is
+# hardcoded anywhere else; add a new candidate here (and its keypoint_map.py mapping) to extend
+# the bake-off.
+#
+# "name" is the single canonical identifier used everywhere: the keypoints.jsonl pose_model
+# field, the golden/poses/<name>/ directory, and detector/keypoint_map.py's POSE_MODEL_LANDMARKS
+# key. dimensionality is "2d" (image-plane only, z always null) or "3d" (world landmarks
+# populate z) -- see VISION_ARCHITECTURE.md §2 on why 3D world landmarks are one of the
+# candidates for fixing the front/side rep-count gap (RC5). approx_size_mb is None until someone
+# actually installs the runtime and measures the weights file(s) -- never a guessed number; the
+# bake-off table prints "n/a" rather than a fabricated size.
+POSE_MODEL_CANDIDATES: tuple[dict[str, Any], ...] = (
+    {
+        "name": "blazepose_33",
+        "landmark_count": 33,
+        "dimensionality": "3d",
+        "runtime": "mediapipe",
+        "weights_ref": "MediaPipe Pose Landmarker (BlazePose GHUM, 'full' complexity)",
+        "approx_size_mb": None,
+    },
+    {
+        "name": "movenet_17",
+        "landmark_count": 17,
+        "dimensionality": "2d",
+        "runtime": "tensorflow",
+        "weights_ref": "TensorFlow Hub MoveNet SinglePose Thunder",
+        "approx_size_mb": None,
+    },
+    {
+        "name": "rtmpose_halpe26",
+        "landmark_count": 26,
+        "dimensionality": "2d",
+        "runtime": "rtmlib",
+        # RTMPose-m over plain-COCO: Halpe-26 (the combined "Body8" training set) adds head/neck/
+        # hip-center/toe/heel points, closer to BlazePose's richness -- see
+        # evals/gate0/README.md's bake-off section for the reasoning behind this choice.
+        "weights_ref": "RTMPose-m, Halpe-26 (Body8 combined-dataset weights, mmpose model zoo)",
+        "approx_size_mb": None,
+    },
+)
+
 # ─── Exercise library loader (CLAUDE.md §6) ───────────────────────────────────────
 # kinetiq-v2/backend/app/core/config.py -> parents[3] == kinetiq-v2/
 EXERCISE_LIBRARY_DIR: Path = Path(__file__).resolve().parents[3] / "exercises"
