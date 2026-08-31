@@ -5,6 +5,55 @@ Format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.5.0] — 2026-08-31 — v3 Stage 2: pose-model bake-off tooling
+
+Kinetiq v3's Stage 2 (`../kinetiq v3/VISION_ARCHITECTURE.md` Stage 2, `ROADMAP.md`): the tooling
+that turns "which pose model?" into a measured table (Ch 39: "religion into measurement"), not a
+decision made here. **The tooling only** -- the real verdict is deferred to when
+`GOLDEN_SET_PROTOCOL.md` §8's bake-off-minimum clips (~23, real recordings) exist; this release
+runs end-to-end on one synthetic multi-model clip to prove the mechanism is correct.
+
+### Added
+
+- `backend/app/core/config.py`: `POSE_MODEL_CANDIDATES`, the single-source registry of bake-off
+  candidates (name, landmark count, 2D/3D, runtime, weights ref, approx size) -- both the capture
+  tool and the harness iterate this; no model name is hardcoded elsewhere.
+- `detector/keypoint_map.py`: extended to `rtmpose_halpe26` (RTMPose-m, Halpe-26 -- chosen over
+  plain-COCO RTMPose specifically for its extra head/neck/hip/toe/heel points, closer to
+  BlazePose's richness) and `blazepose_33`/`rtmpose_halpe26` heel/toe landmarks (for a future
+  lunge toe-position rule). Indices verified against published MediaPipe BlazePose and
+  AlphaPose/mmpose Halpe-26 orderings, not invented.
+- `evals/gate0/golden_loader.py`: `load_golden_poses(golden_dir, pose_model)` -- discovers clips
+  by scanning `golden/poses/<model>/` directly (GOLDEN_SET_PROTOCOL.md §2), independent of
+  `MANIFEST.json`'s flat-clip list, so it never touches or affects `--mode fast/full`.
+  `load_capture_meta()` reads a capture's optional latency/environment stats. Shared
+  `validate_frame_schema()` extracted so the loader and the capture tool enforce identical rules.
+- `evals/gate0/aggregate.py`: `--compare-pose-models` runs the Stage-1 detector once per
+  candidate over `golden/poses/<model>/` and prints one table (clips, rep-accuracy,
+  no-phantom-reps, subject-lock, pooled form precision/recall, latency, size). Exits non-zero
+  only on a malformed golden set, never because one model scores worse than another; never prints
+  a winner.
+- `detector/pose_capture/`: the capture tool (GOLDEN_SET_PROTOCOL.md §6). `base.py`'s
+  `PoseCaptureAdapter` interface + `capture_clip()` writer isolate real (non-deterministic)
+  model inference from everything else, which stays deterministic. Three adapter sketches
+  (`blazepose_adapter.py`, `movenet_adapter.py`, `rtmpose_adapter.py`) -- **none of the three
+  runtimes (mediapipe/tensorflow/rtmlib) are installed in this repo's dev environment**, so each
+  is a best-effort, doc-verified-but-not-live-tested sketch; `dry_run_self_test()` proves the
+  schema/writer plumbing without needing the runtime or a video, and never fabricates keypoints
+  as real data. `python -m detector.pose_capture --list/--dry-run/--model ...` is the CLI.
+- `golden/poses/{blazepose_33,movenet_17,rtmpose_halpe26}/squat_bakeoff_side_001.keypoints.jsonl`:
+  one synthetic clip, same physical motion emitted under each model's own landmark indices --
+  proves `run_detector` produces identical output regardless of which model captured an
+  equivalent skeleton.
+
+### Decisions surfaced (not silently guessed)
+
+- **RTMPose variant**: RTMPose-m on Halpe-26 (26 keypoints), chosen over plain-COCO RTMPose for
+  the extra skeletal richness -- confirmed with the user rather than assumed.
+- **Latency measurement**: capture-machine wall-clock timed around each frame's inference call,
+  explicitly labeled as not representative of on-device mobile performance -- confirmed with the
+  user rather than deferred silently or fabricated.
+
 ## [0.4.0] — 2026-08-30 — v3 Stage 1: subject-lock + rep-validity gate detector
 
 Kinetiq v3's Stage 1 (`../kinetiq v3/VISION_ARCHITECTURE.md`, `ROADMAP.md`): the offline,
