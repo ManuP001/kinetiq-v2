@@ -33,11 +33,18 @@ from exercise_lib import load_fault_severities
 from gate_config import (
     GATE0_TARGET_ACCURACY,
     LIVE_CUE_MAX_WORDS,
+    POSE_MODEL_CANDIDATES,
     SUBJECT_LOCK_FLOOR,
     VIEW_ACC_MAX_GAP,
 )
-from golden_loader import GoldenClip, GoldenSetError, load_golden
-from scorers.form_pr import aggregate_form_pr, gate_form_pr
+from golden_loader import (
+    GoldenClip,
+    GoldenSetError,
+    load_capture_meta,
+    load_golden,
+    load_golden_poses,
+)
+from scorers.form_pr import PR, aggregate_form_pr, gate_form_pr
 from scorers.phantom import PHANTOM_CLIP_TYPES, score_phantom
 from scorers.subject_lock import score_subject_lock
 from scorers.view import score_view_robustness
@@ -297,6 +304,113 @@ def print_stage0_report(clips: list[GoldenClip], mode: str) -> bool:
     return all_pass
 
 
+def _pool_form_pr(per_exercise: dict[str, dict[str, PR]]) -> PR:
+    """Micro-averaged precision/recall across every flag and exercise -- one pooled number per
+    pose model for the bake-off table's single row, rather than --mode full's per-flag
+    breakdown. Ch 39 still applies at the per-dimension level (this is one dimension of several
+    columns, not the only number that matters)."""
+    total = PR()
+    for flags in per_exercise.values():
+        for pr in flags.values():
+            total.tp += pr.tp
+            total.fp += pr.fp
+            total.fn += pr.fn
+    return total
+
+
+def _fmt_pct(value: float | None) -> str:
+    return f"{value:.1%}" if value is not None else "n/a"
+
+
+def print_pose_model_comparison(golden_dir: Path) -> bool:
+    """Stage 2 (VISION_ARCHITECTURE.md Stage 2, ROADMAP.md Stage 2): runs the Stage-1 detector
+    once per candidate pose model (gate_config.POSE_MODEL_CANDIDATES) over golden/poses/<model>/,
+    and prints ONE multi-dimensional comparison table. Ch 39: "a single climbing number can hide
+    a collapsing one" -- every dimension is printed, none dropped, and no winner is picked here;
+    that's a human reading real numbers once GOLDEN_SET_PROTOCOL.md §8's clips exist. Returns
+    False only on a hard failure (a malformed golden set) -- a candidate with zero clips, or one
+    model scoring worse than another, is not a failure of this tool."""
+    print("=" * 100)
+    print("STAGE 2 POSE-MODEL BAKE-OFF")
+    print("=" * 100)
+
+    rows: list[dict] = []
+    any_clips = False
+    for candidate in POSE_MODEL_CANDIDATES:
+        pose_model = candidate["name"]
+        try:
+            clips = load_golden_poses(golden_dir, pose_model)
+        except GoldenSetError as exc:
+            print(f"error: {pose_model}: {exc}", file=sys.stderr)
+            return False
+
+        if not clips:
+            rows.append({"pose_model": pose_model, "clips": 0})
+            continue
+        any_clips = True
+
+        normal = [c for c in clips if c.clip_type == "normal"]
+        rep_acc = (
+            weighted_accuracy([{"actual": c.actual_reps, "detected": c.detected_reps} for c in normal])
+            if normal else None
+        )
+        phantom_result = score_phantom(clips)
+        lock_result = score_subject_lock(clips)
+        pooled = _pool_form_pr(aggregate_form_pr(clips))
+
+        latencies = [
+            meta["avg_latency_ms_per_frame"]
+            for clip in clips
+            if (meta := load_capture_meta(golden_dir, pose_model, clip.clip_id))
+            and meta.get("avg_latency_ms_per_frame") is not None
+        ]
+
+        rows.append({
+            "pose_model": pose_model,
+            "clips": len(clips),
+            "rep_acc": rep_acc,
+            "phantom_checked": phantom_result.checked,
+            "phantom_pass": phantom_result.passed,
+            "subject_lock": lock_result.mean,
+            "precision": pooled.precision,
+            "recall": pooled.recall,
+            "latency_ms": sum(latencies) / len(latencies) if latencies else None,
+            "size_mb": candidate.get("approx_size_mb"),
+        })
+
+    cols = ("model", "clips", "rep-acc", "phantom", "sub-lock", "precision", "recall", "latency", "size")
+    widths = (18, 6, 9, 9, 9, 10, 8, 16, 8)
+    header = "".join(c.ljust(w) for c, w in zip(cols, widths))
+    print(header)
+    print("-" * len(header))
+    for row in rows:
+        if row["clips"] == 0:
+            print(
+                f"{row['pose_model']:<18}{'0':<6}"
+                f"(no golden/poses/{row['pose_model']}/ clips yet -- GOLDEN_SET_PROTOCOL.md §8)"
+            )
+            continue
+        phantom_s = "n/a" if row["phantom_checked"] == 0 else ("PASS" if row["phantom_pass"] else "FAIL")
+        latency_s = f"{row['latency_ms']:.1f}ms" if row["latency_ms"] is not None else "n/a (synthetic)"
+        size_s = f"{row['size_mb']:.1f}MB" if row["size_mb"] is not None else "n/a"
+        values = (
+            row["pose_model"], str(row["clips"]), _fmt_pct(row["rep_acc"]), phantom_s,
+            _fmt_pct(row["subject_lock"]), _fmt_pct(row["precision"]), _fmt_pct(row["recall"]),
+            latency_s, size_s,
+        )
+        print("".join(v.ljust(w) for v, w in zip(values, widths)))
+
+    print()
+    if not any_clips:
+        print("No golden/poses/<model>/ clips exist for any candidate yet -- expected until")
+        print("GOLDEN_SET_PROTOCOL.md §8's bake-off-minimum clips are recorded. This table is the")
+        print("tooling; the real verdict is deferred to when that data exists.")
+    else:
+        print("Read the table; this tool does not pick a winner (Ch 39: model selection is")
+        print("measurement, not a debate -- see gate0/README.md's bake-off section).")
+    return True
+
+
 def run_data(data_dir: Path) -> int:
     """The original --data path (ADR-110), unchanged in behaviour."""
     if not data_dir.is_dir():
@@ -340,6 +454,15 @@ def run_golden(golden_dir: Path, mode: str) -> int:
     return 0 if print_stage0_report(clips, mode) else 1
 
 
+def run_compare_pose_models(golden_dir: Path) -> int:
+    """Stage 2's --compare-pose-models path (VISION_ARCHITECTURE.md Stage 2)."""
+    if not golden_dir.is_dir():
+        print(f"error: {golden_dir} is not a directory", file=sys.stderr)
+        return 2
+
+    return 0 if print_pose_model_comparison(golden_dir) else 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -357,8 +480,20 @@ def main() -> int:
         help="Golden-set gate depth: fast = assertions + rep-acc (CI push); full = + form P/R "
              "+ subject-lock + view (CI merge/nightly). Only applies with --golden.",
     )
+    parser.add_argument(
+        "--compare-pose-models", action="store_true",
+        help="Stage 2: run the detector once per candidate pose model over "
+             "golden/poses/<model>/ and print a comparison table (rep-acc, no-phantom-reps, "
+             "subject-lock, form precision/recall, latency, size). Requires --golden; ignores "
+             "--mode. Prints, never picks a winner.",
+    )
     args = parser.parse_args()
 
+    if args.compare_pose_models:
+        if args.golden is None:
+            print("error: --compare-pose-models requires --golden", file=sys.stderr)
+            return 2
+        return run_compare_pose_models(args.golden)
     if args.golden is not None:
         return run_golden(args.golden, args.mode)
     return run_data(args.data or Path(__file__).parent / "data")
