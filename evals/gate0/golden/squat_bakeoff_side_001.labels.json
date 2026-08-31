@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "clip_id": "squat_bakeoff_side_001",
+  "exercise": "squat",
+  "clip_type": "normal",
+  "view": "side",
+  "lighting": "daylight",
+  "fitness_level": "intermediate",
+  "subject": {
+    "expected": "user",
+    "num_people_in_frame": 1,
+    "subject_track_id": 0
+  },
+  "ground_truth": {
+    "actual_reps": 2,
+    "reps": [
+      {
+        "idx": 1,
+        "faults": []
+      },
+      {
+        "idx": 2,
+        "faults": []
+      }
+    ]
+  },
+  "synthetic": true,
+  "_bakeoff_fixture": true
+}
