@@ -273,6 +273,19 @@ def print_stage0_report(clips: list[GoldenClip], mode: str) -> bool:
                       f"precision={p_str:>5} (floor {pf_str})  "
                       f"recall={r_str:>5} (floor {rf_str})  [{status}]")
 
+        # --- insufficient evidence (Stage 3, SPRINT.md G2): surfaced, never silently dropped.
+        # A sustained flag with too few visibility-passing frames to judge either way -- doesn't
+        # count as a false accusation OR a miss in the P/R table above, but isn't nothing either.
+        insufficient_counts: dict[str, int] = defaultdict(int)
+        for clip in clips:
+            for rep in clip.det_reps:
+                for flag in rep.get("insufficient_evidence", []):
+                    insufficient_counts[flag] += 1
+        if insufficient_counts:
+            print("\n-- Insufficient evidence (sustained flag, too few visible frames to judge) --")
+            for flag in sorted(insufficient_counts):
+                print(f"    {flag:<22} {insufficient_counts[flag]} rep(s)")
+
         # --- subject-lock ---
         lock_result = score_subject_lock(clips)
         print(f"\n-- Subject-lock (floor {SUBJECT_LOCK_FLOOR:.0%}) --")

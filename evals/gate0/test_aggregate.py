@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Unit tests for aggregate.py's Stage-2 pose-model bake-off (--compare-pose-models)."""
+"""Unit tests for aggregate.py: the Stage-2 pose-model bake-off (--compare-pose-models) and the
+Stage-3 golden-set report's insufficient-evidence summary."""
 from __future__ import annotations
 
 import io
@@ -17,9 +18,11 @@ from aggregate import (  # noqa: E402
     _fmt_pct,
     _pool_form_pr,
     print_pose_model_comparison,
+    print_stage0_report,
     run_compare_pose_models,
 )
 from gate_config import POSE_MODEL_CANDIDATES  # noqa: E402
+from golden_loader import load_golden  # noqa: E402
 from scorers.form_pr import PR  # noqa: E402
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "golden"
@@ -144,6 +147,20 @@ class TestHardFailure(unittest.TestCase):
             self.assertFalse(result)
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+class TestInsufficientEvidenceSurfaced(unittest.TestCase):
+    """Stage 3 (SPRINT.md G2): an insufficient-evidence flag must be surfaced in the printed
+    report, not silently absent the way it would be if it just weren't in det.flags."""
+
+    def test_report_shows_the_insufficient_evidence_section_when_present(self):
+        clips = load_golden(FIXTURE_DIR)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            print_stage0_report(clips, mode="full")
+        text = out.getvalue()
+        self.assertIn("Insufficient evidence", text)
+        self.assertIn("hip_sag", text.split("Insufficient evidence")[1])
 
 
 if __name__ == "__main__":
