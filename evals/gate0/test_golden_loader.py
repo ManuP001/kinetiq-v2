@@ -28,7 +28,7 @@ def _write_lines(dir_: Path, name: str, lines) -> None:
 class TestLoadGoldenOnFixture(unittest.TestCase):
     def test_loads_all_synthetic_clips(self):
         clips = load_golden(FIXTURE_DIR)
-        self.assertEqual(len(clips), 8)
+        self.assertEqual(len(clips), 11)
         by_id = {c.clip_id: c for c in clips}
         self.assertIn("squat_bench_phantom_001", by_id)
         self.assertEqual(by_id["squat_bench_phantom_001"].clip_type, "phantom_bench")
@@ -78,6 +78,33 @@ class TestLoadGoldenOnFixture(unittest.TestCase):
         by_id = {c.clip_id: c for c in clips}
         clip = by_id["squat_partial_depth_001"]
         self.assertEqual(clip.detected_reps, clip.actual_reps)
+
+
+class TestFlagHysteresisFixtures(unittest.TestCase):
+    """Stage 3 (SPRINT.md G2): the exact scenario the field hip-sag false positive was --
+    proven end-to-end through the harness, not just detector/test_flag_hysteresis.py's unit
+    tests over synthetic frame lists."""
+
+    def setUp(self):
+        self.by_id = {c.clip_id: c for c in load_golden(FIXTURE_DIR)}
+
+    def test_one_noisy_frame_does_not_flag(self):
+        clip = self.by_id["pushup_noisy_hipsag_side_001"]
+        self.assertEqual(clip.detected_reps, 1)
+        self.assertNotIn("hip_sag", clip.det_reps[0]["flags"])
+        self.assertEqual(clip.gt_reps[0]["faults"], [])  # PT confirmed clean
+
+    def test_sustained_fault_does_flag(self):
+        clip = self.by_id["pushup_sustained_hipsag_side_001"]
+        self.assertEqual(clip.detected_reps, 1)
+        self.assertIn("hip_sag", clip.det_reps[0]["flags"])
+        self.assertEqual(clip.gt_reps[0]["faults"], ["hip_sag"])
+
+    def test_low_visibility_reads_insufficient_evidence_not_an_accusation(self):
+        clip = self.by_id["pushup_lowvis_hipsag_side_001"]
+        self.assertEqual(clip.detected_reps, 1)
+        self.assertNotIn("hip_sag", clip.det_reps[0]["flags"])
+        self.assertIn("hip_sag", clip.det_reps[0]["insufficient_evidence"])
 
 
 class TestLoadGoldenPoses(unittest.TestCase):

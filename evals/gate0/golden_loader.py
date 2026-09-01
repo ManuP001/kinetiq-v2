@@ -203,6 +203,14 @@ def _load_clip(
                     f"{clip_id}: detected flag {flag!r} on rep {rep.get('idx')} is not "
                     f"defined in {exercise!r}'s exercise-library entry"
                 )
+        # Stage 3 (SPRINT.md G2): a sustained flag the detector couldn't judge either way this
+        # rep -- same validation as a committed flag, since it still names a real fault id.
+        for flag in rep.get("insufficient_evidence", []):
+            if flag not in ex_severities:
+                raise GoldenSetError(
+                    f"{clip_id}: insufficient_evidence flag {flag!r} on rep {rep.get('idx')} is "
+                    f"not defined in {exercise!r}'s exercise-library entry"
+                )
 
     return GoldenClip(
         clip_id=clip_id,
