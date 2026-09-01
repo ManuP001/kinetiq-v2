@@ -232,6 +232,42 @@ POSE_MODEL_CANDIDATES: tuple[dict[str, Any], ...] = (
     },
 )
 
+# ─── Stage 3 flag-level hysteresis + visibility gating (SPRINT.md G2 "precision-first flagging";
+# VISION_ERROR_ANALYSIS.md RC4 -- the field hip-sag false positive: a flag tripping on one noisy
+# frame). detector/faults.py's per-frame rules stay exactly as-is; this governs WHEN a fault that
+# rule finds is sustained enough to actually commit to a rep, and gates each flag's own evidence
+# by ITS involved landmarks' visibility (distinct from MIN_VISIBLE_KEYPOINT_FRACTION's coarser
+# whole-body plausibility check above).
+#
+# PLACEHOLDER VALUES -- these are NOT tuned against real data. They exist so the mechanism can be
+# built, tested, and wired into the harness now; the real numbers come from the golden set
+# (GOLDEN_SET_PROTOCOL.md §8) once it exists. Do not treat them as calibrated.
+#
+# A landmark below this visibility isn't usable evidence for a flag's rule on that frame.
+FLAG_MIN_VISIBILITY: float = 0.5
+# A rep needs at least this many visibility-passing (evaluable) frames for a given flag before the
+# detector will assert OR deny it at all; below this the flag reports "insufficient evidence"
+# rather than a guess from too little data (surfaced, never silently dropped).
+FLAG_MIN_EVALUABLE_FRAMES: int = 3
+# Fraction of a flag's evaluable frames in which the fault must be present before it commits to
+# the rep -- fps-robust by design (chosen over a fixed frame count so the same config behaves
+# consistently across devices/frame rates; the device x lighting matrix spans multiple real
+# phones). Severity-keyed and precision-first (SPRINT.md G2): high-severity requires the LARGEST
+# sustained fraction, trading missed faults for never falsely accusing a good rep on a safety-
+# relevant flag; low-severity is the most lenient (advisory, already has no enforced P/R floor).
+FLAG_HYSTERESIS_MIN_FRACTION_HIGH_SEV: float = 0.6
+FLAG_HYSTERESIS_MIN_FRACTION_MED_SEV: float = 0.4
+FLAG_HYSTERESIS_MIN_FRACTION_LOW_SEV: float = 0.3
+# For a flag whose rule the exercise library declares bottom-phase-only (e.g. squat's
+# shallow_depth: phase_detected_in == ["bottom"]) -- the fraction of THIS rep's OWN excursion
+# range (top reference angle down to its minimum) treated as "the bottom phase" for sustained
+# evaluation. Self-relative to the rep's own excursion, not the exercise's correct-depth
+# threshold: a partial-depth rep still has a genuine bottom (its own minimum), even though that
+# minimum never reaches the "correct" band -- gating on the correct-depth threshold instead would
+# make a shallow rep's bottom-phase window empty and the flag permanently unassertable for
+# exactly the reps it exists to catch.
+FLAG_BOTTOM_PHASE_FRACTION: float = 0.2
+
 # ─── Exercise library loader (CLAUDE.md §6) ───────────────────────────────────────
 # kinetiq-v2/backend/app/core/config.py -> parents[3] == kinetiq-v2/
 EXERCISE_LIBRARY_DIR: Path = Path(__file__).resolve().parents[3] / "exercises"
