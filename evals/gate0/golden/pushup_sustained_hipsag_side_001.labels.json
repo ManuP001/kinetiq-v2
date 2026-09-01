@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "clip_id": "pushup_sustained_hipsag_side_001",
+  "exercise": "pushup",
+  "clip_type": "normal",
+  "view": "side",
+  "lighting": "indoor_evening",
+  "fitness_level": "intermediate",
+  "subject": {
+    "expected": "user",
+    "num_people_in_frame": 1,
+    "subject_track_id": 0
+  },
+  "ground_truth": {
+    "actual_reps": 1,
+    "reps": [
+      {
+        "idx": 1,
+        "faults": [
+          "hip_sag"
+        ]
+      }
+    ]
+  },
+  "synthetic": true,
+  "_note": "Hip sags for the entire rep -- a genuine, sustained fault. Proves the hysteresis mechanism doesn't just suppress everything: real, sustained faults must still commit."
+}

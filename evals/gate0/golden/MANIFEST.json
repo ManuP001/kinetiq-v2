@@ -91,6 +91,39 @@
       "num_people_in_frame": 1,
       "labeler": "synthetic",
       "pt_verified": false
+    },
+    {
+      "clip_id": "pushup_noisy_hipsag_side_001",
+      "exercise": "pushup",
+      "clip_type": "normal",
+      "view": "side",
+      "lighting": "indoor_evening",
+      "fitness_level": "intermediate",
+      "num_people_in_frame": 1,
+      "labeler": "synthetic",
+      "pt_verified": false
+    },
+    {
+      "clip_id": "pushup_sustained_hipsag_side_001",
+      "exercise": "pushup",
+      "clip_type": "normal",
+      "view": "side",
+      "lighting": "indoor_evening",
+      "fitness_level": "intermediate",
+      "num_people_in_frame": 1,
+      "labeler": "synthetic",
+      "pt_verified": false
+    },
+    {
+      "clip_id": "pushup_lowvis_hipsag_side_001",
+      "exercise": "pushup",
+      "clip_type": "normal",
+      "view": "side",
+      "lighting": "dim_room",
+      "fitness_level": "intermediate",
+      "num_people_in_frame": 1,
+      "labeler": "synthetic",
+      "pt_verified": false
     }
   ]
 }

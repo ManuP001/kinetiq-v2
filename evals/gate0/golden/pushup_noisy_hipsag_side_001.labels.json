@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "clip_id": "pushup_noisy_hipsag_side_001",
+  "exercise": "pushup",
+  "clip_type": "normal",
+  "view": "side",
+  "lighting": "indoor_evening",
+  "fitness_level": "intermediate",
+  "subject": {
+    "expected": "user",
+    "num_people_in_frame": 1,
+    "subject_track_id": 0
+  },
+  "ground_truth": {
+    "actual_reps": 1,
+    "reps": [
+      {
+        "idx": 1,
+        "faults": []
+      }
+    ]
+  },
+  "synthetic": true,
+  "_note": "One frame (t=500ms) has a spurious hip-sag reading among an otherwise straight-body rep -- PT confirms the rep was clean. Proves SPRINT.md G2's core fix: a single noisy frame must not commit a flag."
+}

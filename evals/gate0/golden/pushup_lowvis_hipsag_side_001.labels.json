@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "clip_id": "pushup_lowvis_hipsag_side_001",
+  "exercise": "pushup",
+  "clip_type": "normal",
+  "view": "side",
+  "lighting": "indoor_evening",
+  "fitness_level": "intermediate",
+  "subject": {
+    "expected": "user",
+    "num_people_in_frame": 1,
+    "subject_track_id": 0
+  },
+  "ground_truth": {
+    "actual_reps": 1,
+    "reps": [
+      {
+        "idx": 1,
+        "faults": []
+      }
+    ]
+  },
+  "synthetic": true,
+  "_note": "Geometrically sagged throughout, but the hip landmark (needed by hip_sag's rule on both sides) is at low visibility (~0.1) the whole rep -- simulates poor lighting/occlusion right where it matters, while shoulder/elbow/wrist/knee/ankle stay clearly visible (so the rep is still counted at all). A PT could not confirm the fault from footage this poor either, so ground truth is clean/unconfirmed. The detector must report hip_sag as 'insufficient evidence', never a confident accusation."
+}
