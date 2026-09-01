@@ -114,25 +114,66 @@ well-formed) without running the full scorer suite.
 `detector/adapter.py`'s `run_detector(keypoints_stream, exercise_id, config) -> DetectedClip` is
 the offline, deterministic, keypoints-only implementation of
 `VISION_ARCHITECTURE.md` Stages 1/3/4/5b — subject-lock, the rep-validity gate, the smoothed rep
-counter, and the (unchanged) deterministic form-flag rules. It's what turns `--mode full` from
-"scores whatever detected.json says" into "measures an actual algorithm against frozen input."
-See its module docstrings (`detector/subject_lock.py`, `plausibility.py`, `rep_counter.py`,
-`faults.py`, `exercise_signals.py`, `keypoint_map.py`) for how each stage works and why. It's
-scoped to squat/pushup/lunge for now (`ROADMAP.md` Stage 1); a new exercise needs its own entry in
-`exercise_signals.PRIMARY_JOINTS` and a fault evaluator in `faults.py` before the detector can
-score it (`golden_loader.py` falls back to a bootstrap `detected.json` until then).
+counter, and the deterministic form-flag rules (as of Stage 3: sustained across the rep, not
+single-frame -- see the next section). It's what turns `--mode full` from "scores whatever
+detected.json says" into "measures an actual algorithm against frozen input." See its module
+docstrings (`detector/subject_lock.py`, `plausibility.py`, `rep_counter.py`, `faults.py`,
+`flag_hysteresis.py`, `exercise_signals.py`, `keypoint_map.py`) for how each stage works and why.
+It's scoped to squat/pushup/lunge for now (`ROADMAP.md` Stage 1); a new exercise needs its own
+entry in `exercise_signals.PRIMARY_JOINTS` and a fault evaluator in `faults.py` before the
+detector can score it (`golden_loader.py` falls back to a bootstrap `detected.json` until then).
 
 This is the harness-side reference implementation the eval gate measures against -- **not** the
 live PWA/JS detector. Porting the algorithm to the live JS path is a deliberate follow-on, not
 done here; every module is written as pure functions over plain dicts specifically so that port
 is a transliteration, not a redesign.
 
+### Stage-3 flag-level hysteresis + visibility gating (`detector/flag_hysteresis.py`)
+
+The direct fix for the field hip-sag false positive (SPRINT.md G2, `../kinetiq-v2/VISION_ERROR_ANALYSIS.md`
+RC4): Stage 1 evaluated each fault rule (`detector/faults.py`) once per rep, at that rep's single
+deepest-point frame -- a single noisy frame could trip a flag on an otherwise-clean rep. Stage 3
+re-evaluates the rule across every frame in the rep's window and only commits the flag once the
+fault held true for a large enough **fraction** of the frames where it could be judged at all
+(fps-robust by design, not a fixed frame count -- confirmed with the user rather than assumed; see
+`flag_hysteresis.py`'s module docstring). Two refinements on top of that:
+
+- **Per-flag visibility gate**: a frame doesn't count as evidence for a flag at all if that
+  flag's own involved landmarks are below `FLAG_MIN_VISIBILITY` on that frame (distinct from the
+  coarser whole-body plausibility check). Too little evidence overall (`< FLAG_MIN_EVALUABLE_FRAMES`)
+  and the flag reports **insufficient evidence** -- not asserted, not denied, and surfaced in the
+  printed report's own section, never silently folded into "no fault".
+- **Severity-aware strictness**: the required sustained fraction is keyed off the same
+  high/med/low taxonomy everything else uses -- high-severity flags need the *most* sustained
+  evidence before committing (precision-first: better to miss a real fault than falsely accuse a
+  good rep on a safety-relevant flag).
+- **Bottom-phase-only faults** (e.g. squat's `shallow_depth`, whose rule the exercise library
+  declares relevant only at the bottom, not the whole descent/ascent) are evaluated over just the
+  bottom fraction of *that rep's own excursion range* -- not the exercise's correct-depth
+  threshold, so a partial-depth rep still has a genuine bottom to judge against (see
+  `adapter.py`'s `_evaluate_rep_flags` docstring; this was a real bug caught while building this,
+  not a hypothetical -- a naive whole-rep window flagged `shallow_depth` on every rep, clean ones
+  included, since standing/mid-descent legitimately isn't "at depth" yet).
+
+Only the 5 per-frame, landmark-based flags go through this (`knee_cave_left/right`,
+`shallow_depth`, `elbow_flare`, `hip_sag`) -- `shallow_pushup`/`shallow_lunge` are rep-aggregate
+(compared against the rep's overall smoothed minimum angle, already temporally smoothed by
+`rep_counter.py`) and unaffected. **This governs WHEN a flag first commits, never un-commits
+one** -- the deterministic safety veto (`VISION_ARCHITECTURE.md` Stage 5b) is untouched.
+
+All the thresholds here (`FLAG_MIN_VISIBILITY`, `FLAG_MIN_EVALUABLE_FRAMES`,
+`FLAG_HYSTERESIS_MIN_FRACTION_{HIGH,MED,LOW}_SEV`, `FLAG_BOTTOM_PHASE_FRACTION`) are **placeholder
+values pending real golden-set tuning** (`GOLDEN_SET_PROTOCOL.md` §8) -- this is the mechanism,
+not the calibration; don't read the numbers in `config.py` as validated.
+
 ### Synthetic fixture data
 
 **The `golden/` directory currently ships only synthetic, parametrically-generated fixture data**
-(see `golden/MANIFEST.json`'s `_synthetic_fixture` flag) — eight small clips covering the cases
-Stage 0/1's exit gates need (clean reps, a seeded knee-cave fault, a bench misdetection, an empty
-frame, a bystander, partial depth, a slow-tempo rep) that exist purely so `scorers/*.py`,
+(see `golden/MANIFEST.json`'s `_synthetic_fixture` flag) — eleven small clips covering the cases
+Stage 0/1/3's exit gates need: clean reps, a seeded knee-cave fault, a bench misdetection, an
+empty frame, a bystander, partial depth, a slow-tempo rep, and (Stage 3) a one-noisy-frame clip
+that must NOT flag, a sustained-fault clip that must, and a low-visibility clip that must read
+"insufficient evidence" -- see the Stage-3 section above. These exist purely so `scorers/*.py`,
 `golden_loader.py`, `detector/*.py`, and `aggregate.py --golden golden/ --mode full` run and pass
 end-to-end without needing real recordings. **They are not PT-verified and are not the frozen
 v3.0 golden set `EVAL_STRATEGY.md` §3 calls for.** Before this becomes the authoritative gate for
@@ -156,10 +197,16 @@ follow-up should normalise `exercises/*.json` directly and delete the alias.
 - The coaching-cue judge is a cheap stub (length + banned-term list), not the calibrated
   LLM-as-judge `EVAL_STRATEGY.md` §2 describes. That lands in Stage 6 — `run_detector` doesn't
   emit coaching cues at all (deliberately; that's Stage 6's job, not Stage 1's).
-- `detector/adapter.py` evaluates form-flag rules once per rep, at that rep's deepest-point
-  frame (falling back to the nearest frame with a valid, plausible pose if the exact deepest
-  frame was a gap) — not across the rep's full trajectory. Full per-frame temporal fault
-  tracking is Stage 4/5's learned form model, not this deterministic baseline.
+- `detector/adapter.py` evaluates the 5 per-frame form-flag rules across each rep's whole window
+  (Stage 3), sustained-fraction-gated -- but still doesn't distinguish *which* sub-phase within
+  that window a frame belongs to beyond the bottom-only narrowing described above; a rule
+  declared relevant to "descending, bottom, ascending" is evaluated identically across all three,
+  not weighted toward the phase where it matters most. Full per-frame temporal fault tracking
+  with real phase awareness is Stage 4/5's learned form model, not this deterministic baseline.
+- `insufficient_evidence` is a new field on each detected rep (not part of `flags`) -- a scorer
+  or report that only reads `flags` will correctly treat it as "no accusation" (never a false
+  positive), but won't see that the flag was actually unjudgeable; `aggregate.py --mode full`
+  surfaces it in its own report section specifically so it isn't silently invisible elsewhere.
 - The Stage-1 detector is scoped to squat/pushup/lunge (`ROADMAP.md`); the 11 requested
   exercises are Stage 5, gated in one at a time, and each needs its own entry in
   `detector/exercise_signals.py` and `detector/faults.py` before it can be scored this way.
@@ -267,8 +314,11 @@ python -m unittest discover -s evals/gate0 -p "test_*.py" -v
 
 `scorers/test_*.py` cover each scoring dimension in isolation over tiny synthetic clips;
 `test_exercise_lib.py` and `test_golden_loader.py` cover the severity alias and schema validation,
-including against the real `exercises/*.json` and the synthetic `golden/` fixture;
-`detector/test_*.py` cover the Stage-1 reference detector's specialists;
+including against the real `exercises/*.json` and the synthetic `golden/` fixture (including the
+Stage-3 hysteresis/visibility fixtures, proven through the full harness, not just in isolation);
+`detector/test_*.py` cover the Stage-1 reference detector's specialists, plus
+`detector/test_flag_hysteresis.py` for the Stage-3 mechanism itself (one-frame-doesn't-flag,
+sustained-does, visibility gating, severity strictness) over synthetic frame lists;
 `detector/pose_capture/test_*.py` cover the capture tool's writer/schema/CLI plumbing using a fake
 in-memory adapter (no real ML runtime needed to test it); `test_aggregate.py` covers the Stage-2
-bake-off table.
+bake-off table and the Stage-3 insufficient-evidence report section.

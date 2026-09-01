@@ -5,6 +5,71 @@ Format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.6.0] — 2026-09-01 — v3 Stage 3: flag-level hysteresis + visibility gating
+
+Kinetiq v3's Stage 3, re-scoped per the task brief: `ROADMAP.md`'s literal Stage-3 entry (rep-
+counter smoothing/hysteresis/tempo/graded-depth) was already built in Stage 1
+(`evals/gate0/detector/rep_counter.py`, untouched here). This release is the missing RC4 piece --
+SPRINT.md G2 "precision-first flagging", the direct fix for the field hip-sag false positive: a
+form flag now attaches to a rep only when the fault is SUSTAINED across a large-enough fraction of
+the rep's frames, and is never evaluated on frames where its own involved landmarks are too low
+visibility.
+
+### Added
+
+- `detector/flag_hysteresis.py`: `evaluate_sustained_flag()` re-evaluates a fault rule across
+  every frame in a rep's window and only returns PRESENT once the fault held true for a
+  severity-keyed fraction of the frames where it could be judged at all (below
+  `FLAG_MIN_EVALUABLE_FRAMES` evaluable frames: `INSUFFICIENT_EVIDENCE`, surfaced, never silently
+  dropped). Covers the 5 per-frame, landmark-based flags (`knee_cave_left/right`,
+  `shallow_depth`, `elbow_flare`, `hip_sag`); `shallow_pushup`/`shallow_lunge` are rep-aggregate
+  (compared against the rep's already-smoothed overall minimum angle) and untouched.
+- `detector/faults.py`: every per-flag predicate now takes an optional `min_visibility`
+  parameter (default `None` = Stage-1 behaviour, unchanged) so the SAME per-side loop serves both
+  a plain rule check and flag_hysteresis.py's visibility-gated evaluation -- avoids a second,
+  independently-maintained "which side is visible" check that could disagree with the rule's own.
+  The old single-frame aggregate functions (`squat_faults`/`pushup_faults`/`lunge_faults`) are
+  removed (nothing but `adapter.py` called them, and it no longer does); replaced by the granular
+  predicates plus two focused rep-aggregate predicates (`shallow_pushup_present`,
+  `shallow_lunge_present`).
+- `detector/adapter.py`: `run_detector` now evaluates the 5 sustained flags across each rep's
+  `[start_ms, end_ms]` window instead of a single deepest-point frame, and reports
+  `insufficient_evidence` per rep alongside `flags`. A bottom-phase-only fault (squat's
+  `shallow_depth`, per its own `phase_detected_in` in `exercises/squat.json`) is narrowed to the
+  bottom fraction of *that rep's own excursion range* (`FLAG_BOTTOM_PHASE_FRACTION`) rather than
+  the exercise's correct-depth threshold -- a real bug caught while building this: a naive
+  whole-rep window flagged `shallow_depth` on every rep, clean ones included, since
+  standing/mid-descent legitimately isn't "at depth" yet.
+- `backend/app/core/config.py`: `FLAG_MIN_VISIBILITY`, `FLAG_MIN_EVALUABLE_FRAMES`,
+  `FLAG_HYSTERESIS_MIN_FRACTION_{HIGH,MED,LOW}_SEV`, `FLAG_BOTTOM_PHASE_FRACTION` -- all
+  PLACEHOLDER values pending real golden-set tuning (`GOLDEN_SET_PROTOCOL.md` §8), clearly marked
+  as such. Single source of truth, imported via `gate_config.py`.
+- Three new synthetic golden clips proving the mechanism end-to-end through the harness (not just
+  unit tests over synthetic frame lists): `pushup_noisy_hipsag_side_001` (one noisy frame, must
+  NOT flag -- the exact field bug), `pushup_sustained_hipsag_side_001` (genuine sustained sag,
+  must flag -- recall holds), `pushup_lowvis_hipsag_side_001` (hip landmark below
+  `FLAG_MIN_VISIBILITY` throughout, must read insufficient evidence, never a confident
+  accusation).
+- `aggregate.py --mode full`: new "Insufficient evidence" report section, surfacing any sustained
+  flag the detector couldn't judge either way -- doesn't count as a false accusation or a miss in
+  the precision/recall table, but isn't nothing either.
+
+### Decision surfaced (not silently guessed)
+
+- **Hysteresis unit**: fraction of a rep's evaluable frames, not a fixed frame count -- confirmed
+  with the user (fps-robust: consistent across devices/frame rates, which matters once real
+  multi-device capture is in the mix, vs. a frame count tuned to one capture rate).
+
+### Verified
+
+`squat_badform_001`'s clean reps (1, 3) no longer show a false `shallow_depth` (the bug this
+release's bottom-phase fix corrects); the seeded knee-cave reps (2, 4) still flag correctly.
+`pushup.hip_sag` on the golden set: precision 100%, recall 100% (tp=1, fp=0, fn=0) -- the noisy
+clip contributes a clean true-negative, the sustained clip a true-positive, and the low-visibility
+clip contributes neither (insufficient evidence, not scored either way). 208 unit tests pass;
+deterministic (verified bit-identical across two full runs); `--data`, `--mode fast/full`, and
+`--compare-pose-models` all unaffected.
+
 ## [0.5.0] — 2026-08-31 — v3 Stage 2: pose-model bake-off tooling
 
 Kinetiq v3's Stage 2 (`../kinetiq v3/VISION_ARCHITECTURE.md` Stage 2, `ROADMAP.md`): the tooling
