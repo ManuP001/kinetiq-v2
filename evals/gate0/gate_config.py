@@ -22,6 +22,7 @@ if str(_BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(_BACKEND_DIR))
 
 from app.core.config import (  # noqa: E402
+    FITNESS_LEVEL_DEFAULT_SETS_REPS,
     FORM_PRECISION_FLOOR_HIGH_SEV,
     FORM_PRECISION_FLOOR_MED_SEV,
     FORM_RECALL_FLOOR_HIGH_SEV,
@@ -57,6 +58,7 @@ from app.core.config import (  # noqa: E402
 )
 
 __all__ = [
+    "FITNESS_LEVEL_DEFAULT_SETS_REPS",
     "FORM_PRECISION_FLOOR_HIGH_SEV",
     "FORM_PRECISION_FLOOR_MED_SEV",
     "FORM_RECALL_FLOOR_HIGH_SEV",
