@@ -68,9 +68,9 @@ The golden set (`golden/`) is the frozen, PT-verified yardstick that scores the 
    `python -m labeling export` turns the filled CSVs into `<clip_id>.labels.json` (schema:
    `EVAL_HARNESS_STAGE0_SPEC.md` §5) and merges the clip into `MANIFEST.json` — a PT never
    hand-writes JSON. `python -m labeling validate --golden golden/` then runs the same checks CI
-   does (fault ids exist and have a severity, phantom/bystander shape, keypoints schema,
-   MANIFEST/labels.json agreement) and prints every offending clip/rep in one report, not just the
-   first.
+   does (fault ids exist and have a severity, phantom_bench/phantom_empty zero-rep shape,
+   bystander's real-rep-count + marked-subject shape, keypoints schema, MANIFEST/labels.json
+   agreement) and prints every offending clip/rep in one report, not just the first.
 4. **Detector output.** For squat/pushup/lunge (the exercises `detector/adapter.py` supports as
    of Stage 1), you don't need to do anything here — `python aggregate.py --golden` recomputes
    `detected.json` from `keypoints.jsonl` via `run_detector` every time it runs, reproducibly.
@@ -340,21 +340,25 @@ collecting **every** issue across the whole golden set into one report (not just
 
 - every fault id exists in that exercise's library and resolves to a severity (reuses
   `exercise_lib.py`'s existing `medium` -> `med` alias -- see below, not re-decided here)
-- phantom/bystander clips have `actual_reps == 0`, `reps == []`, and (bystander) a marked
-  `subject_track_id`
-- a `normal` clip's rep rows cover `1..actual_reps` exactly -- catches a PT skipping a row
+- `phantom_bench`/`phantom_empty` clips have `actual_reps == 0`, `reps == []` -- **`bystander` is
+  NOT phantom-like** (see below): it must have `actual_reps > 0` (the user's real count) and a
+  marked `subject.subject_track_id`
+- a `normal` or `bystander` clip's rep rows cover `1..actual_reps` exactly -- catches a PT
+  skipping a row
 - `keypoints.jsonl` frames are schema-valid, for every `poses/<model>/` this clip has captures
   under (missing captures are a **warning**, not an error -- capture and labeling can happen in
   either order)
 - `MANIFEST.json` and each `labels.json` agree field-for-field (catches copy-paste drift)
 
-**A genuine cross-doc conflict, surfaced rather than silently picked:** `GOLDEN_SET_PROTOCOL.md`
-§4 describes a `bystander` clip's `actual_reps` as "the user's real count", but
-`EVAL_HARNESS_STAGE0_SPEC.md` §5 and the already-implemented `golden_loader.PHANTOM_LIKE_CLIP_TYPES`
-rule (exercised by the existing `pushup_bystander_001` fixture) require `actual_reps == 0` for
-bystander too. `labeling/validate.py` follows the implemented/tested rule -- the one this task's
-own acceptance bar ("the existing harness loads and scores it") actually enforces -- and names the
-conflict in its error message rather than leaving a PT to guess why a real count was rejected.
+**`bystander` is a real-rep clip, not phantom-like -- resolved.** An earlier revision of this
+harness had `bystander` requiring `actual_reps == 0` (matching a stale reading of
+`EVAL_HARNESS_STAGE0_SPEC.md` §5 against `GOLDEN_SET_PROTOCOL.md` §4, which describes a
+bystander's `actual_reps` as "the user's real count"). The canonical answer, now consistent across
+`EVAL_HARNESS_STAGE0_SPEC.md` §5/§7, `EVAL_STRATEGY.md`, `EXERCISE_LIBRARY.md` §5, and
+`ROADMAP.md`: **only `phantom_bench`/`phantom_empty` are zero-rep.** A bystander clip proves the
+skeleton stays on the user (subject-lock, `scorers/subject_lock.py`) *while still counting the
+user's real reps* -- it flows into ordinary rep-accuracy and form-P/R scoring exactly like a
+`normal` clip, and `scorers/phantom.py`'s zero-reps gate never touches it.
 
 ## Unit tests
 
