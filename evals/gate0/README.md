@@ -58,25 +58,33 @@ The golden set (`golden/`) is the frozen, PT-verified yardstick that scores the 
 1. **Record.** Film a clip for the case you need (a clean set, a deliberately faulted set, a
    moved bench with nobody in frame, a bystander in the background, the same set from
    front/side/diagonal, ...). `EVAL_STRATEGY.md` §1's seed cases are the starting list.
-2. **Label.** A PT/trainer reviews the recording and writes `<clip_id>.labels.json`: per-rep
-   faults (as `error_id`s that exist in the relevant `exercises/*.json`), the subject's
-   `subject_track_id`, view, lighting, fitness level. See the schema in
-   `EVAL_HARNESS_STAGE0_SPEC.md` §5. Extract `<clip_id>.keypoints.jsonl` from the same recording
-   (pose model's raw per-frame output — this is the *only* thing derived from pixels that gets
-   committed).
-3. **Detector output.** For squat/pushup/lunge (the exercises `detector/adapter.py` supports as
+2. **Capture keypoints.** Run each candidate pose model over the recording
+   (`detector/pose_capture/`, below) to produce `golden/poses/<model>/<clip_id>.keypoints.jsonl`
+   — the *only* thing derived from pixels that gets committed. Can happen before or after
+   labeling; the two are independent.
+3. **Label.** A PT/trainer reviews the recording and fills two CSVs (`labeling/`, below): one row
+   per clip (exercise, clip_type, view, lighting, fitness level, subject info) and one row per rep
+   (which `error_id`s from the relevant `exercises/*.json` are present, or none for a clean rep).
+   `python -m labeling export` turns the filled CSVs into `<clip_id>.labels.json` (schema:
+   `EVAL_HARNESS_STAGE0_SPEC.md` §5) and merges the clip into `MANIFEST.json` — a PT never
+   hand-writes JSON. `python -m labeling validate --golden golden/` then runs the same checks CI
+   does (fault ids exist and have a severity, phantom/bystander shape, keypoints schema,
+   MANIFEST/labels.json agreement) and prints every offending clip/rep in one report, not just the
+   first.
+4. **Detector output.** For squat/pushup/lunge (the exercises `detector/adapter.py` supports as
    of Stage 1), you don't need to do anything here — `python aggregate.py --golden` recomputes
    `detected.json` from `keypoints.jsonl` via `run_detector` every time it runs, reproducibly.
    For an exercise the detector doesn't support yet (a future Tier A/B/C clip added before its
    own detector logic lands), hand-author or live-capture `<clip_id>.detected.json` instead
    (schema in spec §5) — the loader falls back to it automatically. Either way, it's **not**
    frozen the way labels/keypoints are.
-4. **Freeze.** Add the clip's row to `MANIFEST.json`, get PT sign-off, and commit `labels.json` +
-   `keypoints.jsonl` + the `MANIFEST.json` update together (plus `detected.json` only if step 3
+5. **Freeze.** Get PT sign-off (`pt_verified: true` in the clip-level CSV, carried into both
+   `labels.json` and `MANIFEST.json` by the exporter), and commit `labels.json` +
+   `keypoints.jsonl` + the `MANIFEST.json` update together (plus `detected.json` only if step 4
    needed the bootstrap fallback). Per `EVAL_STRATEGY.md` §3: never edit an existing golden case
    in the same commit as a model or threshold change — the yardstick has to hold still to know
    whether a score moved because the system improved or the goalposts did.
-5. **Score.**
+6. **Score.**
    ```
    python aggregate.py --golden golden/ --mode fast    # assertions + rep-acc (CI push, seconds)
    python aggregate.py --golden golden/ --mode full    # + form P/R + subject-lock + view (CI merge/nightly)
@@ -247,15 +255,16 @@ isolated there, so `run_detector` and every scorer downstream of a frozen `keypo
 fully deterministic (verified by `test_run_detector_output_is_identical_across_models_for_equivalent_skeletons`
 in `test_golden_loader.py`).
 
-**None of the three runtimes (`mediapipe`, `tensorflow`, `rtmlib`) are installed in this repo's
-dev environment**, and there's no recorded video to run them over yet either -- `--list` correctly
-reports all three unavailable here. Each adapter's `infer_frames()` is a best-effort sketch of the
-real API (verified against current docs at write time, but **not** run against a live install --
-see each adapter's module docstring for exactly what to validate before trusting its output on a
-capable machine). `--dry-run` proves the schema-validation + writer plumbing is correct
-independent of any of that. **Nothing here fakes keypoints as real data** -- a dry run writes a
-synthetic frame to a throwaway temp file, validates it, and discards it; it never touches
-`golden/`.
+**All three adapters are live-tested** (`detector/pose_capture/README.md`) -- each was run
+end-to-end through this exact `capture_clip()`/CLI path against a real throwaway video, with
+`num_poses`/`multi_person_config` per ADR-300 so every candidate yields all people in frame, not
+just the top-1. None of the three runtimes are installed in *this* repo's own dev environment by
+default (`--list` reports them unavailable here) -- they were verified in an isolated venv outside
+the repo; see `detector/pose_capture/README.md` for exact versions, install steps, and the two
+real bugs live-testing caught (wrong coordinate space, wrong rtmlib class) that a docs-only sketch
+had missed. `--dry-run` proves the schema-validation + writer plumbing independent of any runtime
+being installed. **Nothing here fakes keypoints as real data** -- a dry run writes a synthetic
+frame to a throwaway temp file, validates it, and discards it; it never touches `golden/`.
 
 Capture writes exactly two files per (model, clip):
 `golden/poses/<model>/<clip_id>.keypoints.jsonl` and a companion `.capture_meta.json` (frame
@@ -289,20 +298,63 @@ never because one model's numbers are worse than another's. Read `VISION_ARCHITE
 
 ### Known Stage-2 simplifications
 
-- None of the 3 candidate runtimes are installed in this dev environment; each adapter's
-  `infer_frames()` is an unverified best-effort sketch of the real API -- validate it against
-  current docs on a machine that can actually run it before trusting its output (see each
-  adapter's module docstring for exactly what to check).
-- `movenet_adapter.py`'s MoveNet Thunder is SinglePose (one person per frame) -- capturing a
-  `bystander` clip with it as-is would silently under-report people; a real capture needs a
-  person-detect/crop step first (VISION_ARCHITECTURE.md Stage 1's MoveNet MultiPose or
-  YOLO-pose), which this sketch doesn't implement.
-- `approx_size_mb` is `None` for every candidate -- nobody has measured real installed weights
-  here.
+- `approx_size_mb` is only measured for `blazepose_33` so far (the one .task file downloaded and
+  weighed this session) -- `movenet_17`/`rtmpose_halpe26` still show `None`/`n/a` until someone
+  measures their real installed weights.
 - The bake-off table's precision/recall is pooled (micro-averaged across every flag) for one row
   per model; a real bake-off decision should also read the full per-flag breakdown (`--mode full`
   per pose model) before concluding a model is better, per Ch 39's "a single number can hide a
   collapsing one."
+- `movenet_17`'s emitted coordinates are normalized to the letterbox-padded input, not corrected
+  back to the source frame's own aspect ratio -- a small systematic offset on non-square video;
+  see `detector/pose_capture/README.md`'s "known caveat" section.
+- Still only one real clip has been run through all three adapters (a throwaway plumbing
+  smoke-test, not golden-set data) -- `GOLDEN_SET_PROTOCOL.md` §8's ~23-clip bake-off minimum is
+  what the table needs before it means anything.
+
+## Labeling: `labeling/`
+
+Turns a PT's filled spreadsheet into a frozen golden-set clip
+(`GOLDEN_SET_PROTOCOL.md` §7) -- no engineering help needed to fill it, no hand-written JSON.
+
+```
+python -m labeling templates --out-dir label_work/       # blank clips_template.csv + reps_template.csv
+python -m labeling templates --list-faults squat         # valid error_ids for squat, read from exercises/squat.json
+python -m labeling export --clips label_work/clips_template.csv \
+    --reps label_work/reps_template.csv --golden golden/  # CSV -> labels.json + MANIFEST.json
+python -m labeling validate --golden golden/              # same checks CI runs
+```
+
+Run from `evals/gate0/`. Two CSVs, one row each:
+
+- **`clips_template.csv`** (one row per clip): `clip_id, exercise, clip_type, view, lighting,
+  fitness_level, actual_reps, num_people_in_frame, subject_track_id, labeler, pt_verified`.
+- **`reps_template.csv`** (one row per rep): `clip_id, rep_idx, faults` -- `faults` is
+  `;`-separated `error_id`s from that exercise's library, empty for a clean rep.
+
+`labeling/export.py` is deliberately mechanical: it only reshapes CSV rows into the schema's JSON
+shape and enforces CSV-structural integrity (a required column, a well-formed integer, no
+duplicate clip_id/rep_idx) -- it never checks domain rules. `labeling/validate.py` does that,
+collecting **every** issue across the whole golden set into one report (not just the first, unlike
+`golden_loader.py`'s fail-fast loading) so a PT fixing a spreadsheet gets the full list at once:
+
+- every fault id exists in that exercise's library and resolves to a severity (reuses
+  `exercise_lib.py`'s existing `medium` -> `med` alias -- see below, not re-decided here)
+- phantom/bystander clips have `actual_reps == 0`, `reps == []`, and (bystander) a marked
+  `subject_track_id`
+- a `normal` clip's rep rows cover `1..actual_reps` exactly -- catches a PT skipping a row
+- `keypoints.jsonl` frames are schema-valid, for every `poses/<model>/` this clip has captures
+  under (missing captures are a **warning**, not an error -- capture and labeling can happen in
+  either order)
+- `MANIFEST.json` and each `labels.json` agree field-for-field (catches copy-paste drift)
+
+**A genuine cross-doc conflict, surfaced rather than silently picked:** `GOLDEN_SET_PROTOCOL.md`
+§4 describes a `bystander` clip's `actual_reps` as "the user's real count", but
+`EVAL_HARNESS_STAGE0_SPEC.md` §5 and the already-implemented `golden_loader.PHANTOM_LIKE_CLIP_TYPES`
+rule (exercised by the existing `pushup_bystander_001` fixture) require `actual_reps == 0` for
+bystander too. `labeling/validate.py` follows the implemented/tested rule -- the one this task's
+own acceptance bar ("the existing harness loads and scores it") actually enforces -- and names the
+conflict in its error message rather than leaving a PT to guess why a real count was rejected.
 
 ## Unit tests
 
@@ -321,4 +373,8 @@ Stage-3 hysteresis/visibility fixtures, proven through the full harness, not jus
 sustained-does, visibility gating, severity strictness) over synthetic frame lists;
 `detector/pose_capture/test_*.py` cover the capture tool's writer/schema/CLI plumbing using a fake
 in-memory adapter (no real ML runtime needed to test it); `test_aggregate.py` covers the Stage-2
-bake-off table and the Stage-3 insufficient-evidence report section.
+bake-off table and the Stage-3 insufficient-evidence report section; `labeling/test_*.py` cover
+the CSV-template writer, the exporter (good clip, phantom clip, duplicate/malformed rows), and the
+validator (a good clip, a phantom clip, an unknown fault id, and a fault whose exercise-library
+entry has no severity at all, via a temp library override -- the real `exercises/*.json` always
+declare one today).
