@@ -298,6 +298,14 @@ FLAG_HYSTERESIS_MIN_FRACTION_LOW_SEV: float = 0.3
 # exactly the reps it exists to catch.
 FLAG_BOTTOM_PHASE_FRACTION: float = 0.2
 
+# ─── Live-vision prototype detector API (evals/gate0/prototype_api/) ──────────────
+# Step 1 of the live-vision-prototype build: a thin FastAPI wrapper around the eval-validated
+# run_detector, NOT the full /v2 product API. Session buffering is in-memory, single-process --
+# this cap exists purely so an abandoned/misbehaving session's frame buffer can't grow without
+# bound, not as a tuned product limit. ~2 minutes at 30fps; a prototype-length set is expected to
+# finish well under this.
+PROTOTYPE_SESSION_MAX_FRAMES: int = 3600
+
 # ─── Exercise library loader (CLAUDE.md §6) ───────────────────────────────────────
 # kinetiq-v2/backend/app/core/config.py -> parents[3] == kinetiq-v2/
 EXERCISE_LIBRARY_DIR: Path = Path(__file__).resolve().parents[3] / "exercises"
