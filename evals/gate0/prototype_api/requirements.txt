@@ -1,0 +1,6 @@
+# evals/gate0/prototype_api -- run/test dependencies only. Everything else this service imports
+# (detector/, golden_loader.py, gate_config.py) is stdlib-only, per the existing gate0 harness.
+fastapi==0.141.1
+uvicorn==0.35.0
+pydantic==2.11.7
+httpx==0.28.1
