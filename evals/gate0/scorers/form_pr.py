@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Optional
 
 import gate_config
+from scorers.phantom import PHANTOM_CLIP_TYPES
 from scorers.rep_match import match_reps
 
 _PRECISION_FLOORS = {
@@ -102,12 +103,16 @@ def score_clip_form_pr(gt_reps: list[dict[str, Any]], det_reps: list[dict[str, A
 
 
 def aggregate_form_pr(clips: Iterable[Any]) -> dict[str, dict[str, PR]]:
-    """exercise -> flag -> PR, summed across every 'normal' clip. Phantom/bystander clips carry
-    no faults by construction (EVAL_HARNESS_STAGE0_SPEC.md §5) and are scored separately by
-    scorers/phantom.py and scorers/subject_lock.py."""
+    """exercise -> flag -> PR, summed across every clip with real per-rep faults. Only
+    phantom_bench/phantom_empty carry no faults by construction (EVAL_HARNESS_STAGE0_SPEC.md
+    §5) and are excluded here -- graded separately by scorers/phantom.py instead. bystander is
+    NOT phantom-like (the resolved cross-doc decision -- see scorers/phantom.py's module
+    docstring): the user's real reps are labeled normally, faults included, so a bystander clip
+    contributes form P/R evidence exactly like a 'normal' one, in addition to being scored by
+    scorers/subject_lock.py."""
     result: dict[str, dict[str, PR]] = {}
     for clip in clips:
-        if clip.clip_type != "normal":
+        if clip.clip_type in PHANTOM_CLIP_TYPES:
             continue
         per_flag = score_clip_form_pr(clip.gt_reps, clip.det_reps)
         ex_bucket = result.setdefault(clip.exercise, {})
