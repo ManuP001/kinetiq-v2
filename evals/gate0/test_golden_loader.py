@@ -231,12 +231,24 @@ class TestLoadGoldenValidation(unittest.TestCase):
 
     def test_phantom_like_clip_with_nonzero_actual_reps_raises(self):
         labels = self._labels()
-        labels["clip_type"] = "bystander"
+        labels["clip_type"] = "phantom_empty"
         labels["ground_truth"]["actual_reps"] = 3
         _write(self.tmpdir, f"{self.clip_id}.labels.json", labels)
         _write(self.tmpdir, "MANIFEST.json", self.manifest)
         with self.assertRaises(GoldenSetError):
             load_golden(self.tmpdir)
+
+    def test_bystander_with_nonzero_actual_reps_does_not_raise(self):
+        # bystander is NOT phantom-like (EVAL_HARNESS_STAGE0_SPEC.md §5/§7,
+        # EXERCISE_LIBRARY.md §5, ROADMAP.md): the user's real rep count is > 0 by construction.
+        labels = self._labels()
+        labels["clip_type"] = "bystander"
+        labels["ground_truth"]["actual_reps"] = 3
+        _write(self.tmpdir, f"{self.clip_id}.labels.json", labels)
+        _write(self.tmpdir, "MANIFEST.json", self.manifest)
+        clips = load_golden(self.tmpdir)
+        self.assertEqual(clips[0].clip_type, "bystander")
+        self.assertEqual(clips[0].actual_reps, 3)
 
     def test_missing_detected_json_is_fine_for_a_detector_scoped_exercise(self):
         # pushup is within detector.adapter's Stage-1 scope -- no detected.json is needed at all

@@ -29,7 +29,12 @@ import exercise_lib
 from detector.adapter import run_detector, score_subject_lock_against_expected
 
 VALID_CLIP_TYPES = ("normal", "phantom_bench", "phantom_empty", "bystander")
-PHANTOM_LIKE_CLIP_TYPES = ("phantom_bench", "phantom_empty", "bystander")
+# Only phantom_bench/phantom_empty are zero-rep (EVAL_HARNESS_STAGE0_SPEC.md §5/§7,
+# EVAL_STRATEGY.md, EXERCISE_LIBRARY.md §5, ROADMAP.md -- the resolved cross-doc decision).
+# bystander is a REAL-REP clip: the user exercises normally while a second person is in frame;
+# it's scored under subject-lock (scorers/subject_lock.py) and rep-accuracy, never treated as a
+# zero-rep phantom gate (scorers/phantom.py's PHANTOM_CLIP_TYPES mirrors this).
+PHANTOM_LIKE_CLIP_TYPES = ("phantom_bench", "phantom_empty")
 VALID_VIEWS = ("front", "side", "diagonal")
 
 
