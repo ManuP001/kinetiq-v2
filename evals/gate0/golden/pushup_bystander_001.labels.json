@@ -12,8 +12,12 @@
     "subject_track_id": 0
   },
   "ground_truth": {
-    "actual_reps": 0,
-    "reps": []
+    "actual_reps": 2,
+    "reps": [
+      { "idx": 1, "faults": [] },
+      { "idx": 2, "faults": [] }
+    ]
   },
-  "synthetic": true
+  "synthetic": true,
+  "_note": "bystander clips are NOT zero-rep (EVAL_HARNESS_STAGE0_SPEC.md §5/§7): the user really does 2 clean reps while a second person stands nearby; this clip proves subject-lock (skeleton stays on track_id 0) AND rep-accuracy, not a zero-rep phantom gate."
 }
