@@ -55,7 +55,7 @@ from detector.flag_hysteresis import (
     evaluate_sustained_flag,
 )
 from detector.plausibility import PlausibilityConfig, is_plausible_human
-from detector.rep_counter import RepCounterConfig, count_reps
+from detector.rep_counter import RepCounterConfig, count_reps_with_state
 from detector.subject_lock import track_subject
 
 DETECTOR_VERSION = "kinetiq-v3-stage1-reference"
@@ -94,6 +94,11 @@ class DetectedClip:
     frames_total: int
     subject_track_sequence: List[Optional[int]]  # per-frame locked track_id, or None
     coaching_cues: List[Dict[str, Any]]
+    # Live/trailing rep-counter state as of the last frame (detector/rep_counter.py's
+    # count_reps_with_state) -- a frozen-clip eval consumer has no use for "what's happening
+    # right now" (the clip is already over), but a live session does; see prototype_api/.
+    phase: str = "top"
+    rep_in_progress: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -108,6 +113,8 @@ class DetectedClip:
                 for r in self.reps
             ],
             "coaching_cues": self.coaching_cues,
+            "phase": self.phase,
+            "rep_in_progress": self.rep_in_progress,
         }
 
 
@@ -277,7 +284,8 @@ def run_detector(
                 angle_lookup[t_ms] = angle
         samples.append((t_ms, angle))
 
-    rep_events = count_reps(samples, cfg.rep_counter)
+    counter_result = count_reps_with_state(samples, cfg.rep_counter)
+    rep_events = counter_result.events
     bottom_max_deg = get_bottom_angle_max(exercise_id, exercise_json)
     severities = exercise_lib.load_fault_severities().get(exercise_id, {})
 
@@ -306,6 +314,8 @@ def run_detector(
         # text (which isn't guaranteed to fit the Stage-0 cue-length assertion and isn't this
         # detector's job to author or select).
         coaching_cues=[],
+        phase=counter_result.phase,
+        rep_in_progress=counter_result.rep_in_progress,
     )
 
 
