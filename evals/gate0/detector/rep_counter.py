@@ -34,6 +34,13 @@ A None sample (no locked/plausible subject that frame -- a signal gap) is simply
 doesn't advance the running peak/minimum, but it doesn't reset an excursion in progress either. A
 gap long enough to make the eventual duration implausible is caught by the tempo check above, not
 by special-cased gap logic.
+
+count_reps() only returns CLOSED rep events -- exactly what the eval harness needs (a frozen clip
+either has a rep or it doesn't). A live prototype also needs to know what's happening RIGHT NOW,
+mid-rep, which the FSM already tracks internally but count_reps() discarded. count_reps_with_state()
+exposes that trailing state without forking the FSM: both functions share the same loop
+(_run_fsm), so there is exactly one place this algorithm is implemented -- count_reps() is now a
+thin wrapper, unchanged in signature and behavior (every existing caller/test is unaffected).
 """
 from __future__ import annotations
 
@@ -42,6 +49,16 @@ from typing import List, Optional, Sequence, Tuple
 
 import gate_config
 from detector.geometry import median_filter
+
+# FSM internal state name -> the live/trailing phase reported to a caller. There is no distinct
+# "bottom" state in the FSM (the DESCENDING->ASCENDING transition happens at a single sample);
+# SEEKING_DESCENT covers both "resting at the top" and "no motion seen yet" -- both are
+# legitimately "not mid-rep".
+_PHASE_NAMES = {
+    "SEEKING_DESCENT": "top",
+    "DESCENDING": "descending",
+    "ASCENDING": "ascending",
+}
 
 
 @dataclass
@@ -75,12 +92,38 @@ class RepCounterConfig:
     max_rep_duration_ms: int = gate_config.MAX_REP_DURATION_MS
 
 
+@dataclass
+class RepCounterResult:
+    events: List[RepEvent]
+    phase: str  # "top" | "descending" | "ascending" -- the FSM's trailing state, see _PHASE_NAMES
+    rep_in_progress: bool  # phase != "top": the user has started an excursion that hasn't closed
+
+
 def count_reps(
     samples: Sequence[Tuple[int, Optional[float]]], config: Optional[RepCounterConfig] = None
 ) -> List[RepEvent]:
     """samples: [(t_ms, angle_or_None), ...] in ascending time order, already restricted to the
     locked/plausible subject (see detector/adapter.py). Returns only rep events that PASS the
-    min-excursion and tempo gates -- discarded candidates are simply absent."""
+    min-excursion and tempo gates -- discarded candidates are simply absent.
+
+    Thin wrapper over _run_fsm(); see count_reps_with_state() if you also need the live/trailing
+    phase (a prototype/live-session consumer, not the eval harness -- see module docstring)."""
+    return _run_fsm(samples, config).events
+
+
+def count_reps_with_state(
+    samples: Sequence[Tuple[int, Optional[float]]], config: Optional[RepCounterConfig] = None
+) -> RepCounterResult:
+    """Same algorithm as count_reps() (both call _run_fsm() -- one implementation, not a fork),
+    additionally returning the FSM's live/trailing phase and whether a rep is currently in
+    progress. For a live session that needs "what is the user doing right now", not just which
+    reps already closed."""
+    return _run_fsm(samples, config)
+
+
+def _run_fsm(
+    samples: Sequence[Tuple[int, Optional[float]]], config: Optional[RepCounterConfig] = None
+) -> RepCounterResult:
     cfg = config or RepCounterConfig()
 
     times = [t for t, _ in samples]
@@ -148,4 +191,6 @@ def count_reps(
             if state == prev_state:
                 break
 
-    return events
+    return RepCounterResult(
+        events=events, phase=_PHASE_NAMES[state], rep_in_progress=state != "SEEKING_DESCENT"
+    )

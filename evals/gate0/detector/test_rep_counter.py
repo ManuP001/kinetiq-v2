@@ -8,7 +8,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from detector.rep_counter import RepCounterConfig, count_reps  # noqa: E402
+from detector.rep_counter import (  # noqa: E402
+    RepCounterConfig,
+    count_reps,
+    count_reps_with_state,
+)
 
 # Smoothing off (window=1) for most tests so exact input angles pass straight through and the
 # assertions are about the valley/tempo logic, not the median filter (that's tested separately
@@ -97,6 +101,55 @@ class TestCountReps(unittest.TestCase):
         default_cfg = RepCounterConfig()
         import gate_config
         self.assertEqual(default_cfg.top_angle_deg, gate_config.REP_COUNTER_TOP_ANGLE_DEG)
+
+
+class TestCountRepsWithState(unittest.TestCase):
+    """count_reps_with_state() shares _run_fsm() with count_reps() -- same algorithm, additionally
+    exposing the live/trailing phase a prototype session needs (not the eval harness, which only
+    ever needs closed events)."""
+
+    def test_matches_count_reps_events_exactly(self):
+        samples = series([
+            (0, 175), (200, 80), (400, 175), (600, 80), (800, 175),
+        ])
+        self.assertEqual(count_reps_with_state(samples, CFG).events, count_reps(samples, CFG))
+
+    def test_no_samples_yet_is_top_and_not_in_progress(self):
+        result = count_reps_with_state([], CFG)
+        self.assertEqual(result.phase, "top")
+        self.assertFalse(result.rep_in_progress)
+        self.assertEqual(result.events, [])
+
+    def test_resting_at_top_after_a_closed_rep_is_top_and_not_in_progress(self):
+        samples = series([(0, 175), (200, 80), (400, 175)])
+        result = count_reps_with_state(samples, CFG)
+        self.assertEqual(len(result.events), 1)
+        self.assertEqual(result.phase, "top")
+        self.assertFalse(result.rep_in_progress)
+
+    def test_mid_descent_is_descending_and_in_progress(self):
+        samples = series([(0, 175), (100, 175), (200, 140)])
+        result = count_reps_with_state(samples, CFG)
+        self.assertEqual(result.events, [])  # hasn't closed yet
+        self.assertEqual(result.phase, "descending")
+        self.assertTrue(result.rep_in_progress)
+
+    def test_stalled_ascent_that_never_closes_is_ascending_and_in_progress(self):
+        # the exact scenario in test_never_reaching_top_again_never_closes_the_rep above: no
+        # closed event, but the FSM is clearly mid-rep, not resting.
+        samples = series([(0, 175), (200, 80), (400, 140)])
+        result = count_reps_with_state(samples, CFG)
+        self.assertEqual(result.events, [])
+        self.assertEqual(result.phase, "ascending")
+        self.assertTrue(result.rep_in_progress)
+
+    def test_trailing_none_gap_reports_the_last_known_phase(self):
+        # occlusion on the very last sample -- state can't advance, so the last known phase (mid
+        # descent) is reported rather than something fabricated.
+        samples = series([(0, 175), (200, 140), (300, None)])
+        result = count_reps_with_state(samples, CFG)
+        self.assertEqual(result.phase, "descending")
+        self.assertTrue(result.rep_in_progress)
 
 
 if __name__ == "__main__":
