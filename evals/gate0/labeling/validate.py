@@ -4,24 +4,26 @@ evals/gate0/labeling/validate.py
 
 The validator CI (and a PT/dev running it by hand) runs over golden/ after export.py writes
 labels.json + MANIFEST.json: does every fault id actually exist in that exercise's library with a
-real severity, do phantom/bystander clips carry actual_reps == 0 with a marked subject, are
-keypoints.jsonl frames schema-valid, do MANIFEST.json and the labels.json files agree. Unlike
-golden_loader.py (which raises and stops at the first problem -- correct for its own job of
-building clip objects to score), this collects EVERY issue across the whole set into one
-ValidationReport, because a PT fixing a spreadsheet needs the full list, not one error at a time.
+real severity, do phantom_bench/phantom_empty clips carry actual_reps == 0, does a bystander clip
+carry a real rep count with a marked subject, are keypoints.jsonl frames schema-valid, do
+MANIFEST.json and the labels.json files agree. Unlike golden_loader.py (which raises and stops at
+the first problem -- correct for its own job of building clip objects to score), this collects
+EVERY issue across the whole set into one ValidationReport, because a PT fixing a spreadsheet
+needs the full list, not one error at a time.
 
 Severity taxonomy note (EXERCISE_LIBRARY.md §4): the exercise library still writes "medium", not
 "med" -- exercise_lib.py already resolved this by aliasing at read time (see its module
 docstring); this validator reuses that loader rather than re-deciding it.
 
-Bystander actual_reps note (a genuine cross-doc conflict, surfaced not silently picked):
-GOLDEN_SET_PROTOCOL.md §4 describes a bystander clip's actual_reps as "the user's real count",
-but EVAL_HARNESS_STAGE0_SPEC.md §5 and the already-implemented, already-tested
-golden_loader.PHANTOM_LIKE_CLIP_TYPES rule require actual_reps == 0 for bystander too (matching
-the existing pushup_bystander_001 fixture). This validator follows the implemented/tested rule --
-the one "the existing harness" (this task's own acceptance bar) actually enforces -- and names the
-conflict in the error message so a PT isn't left guessing why a real bystander rep count is
-rejected.
+Bystander actual_reps -- RESOLVED (was previously a genuine cross-doc conflict, flagged rather
+than silently picked in an earlier revision of this file): the canonical answer, now consistent
+across EVAL_HARNESS_STAGE0_SPEC.md §5/§7, EVAL_STRATEGY.md, EXERCISE_LIBRARY.md §5, and
+ROADMAP.md, is that only phantom_bench/phantom_empty are zero-rep. A bystander clip is a REAL-REP
+clip: the user exercises normally (actual_reps = the user's real count, > 0, reps[] labeled with
+faults exactly like a normal clip) while a second person stands nearby, and is scored under
+subject-lock (scorers/subject_lock.py) plus ordinary rep-accuracy -- never the phantom gate
+(scorers/phantom.py). This validator's PHANTOM_LIKE_CLIP_TYPES import (golden_loader.py) reflects
+that: it no longer includes "bystander".
 """
 from __future__ import annotations
 
@@ -170,30 +172,35 @@ def _check_labels(
 
     if clip_type in PHANTOM_LIKE_CLIP_TYPES:
         if actual_reps != 0 or reps:
-            note = (
-                " (GOLDEN_SET_PROTOCOL.md §4 describes bystander's actual_reps as the user's real "
-                "count, but the implemented/tested rule -- EVAL_HARNESS_STAGE0_SPEC.md §5 -- "
-                "requires 0; see labeling/validate.py's module docstring)"
-                if clip_type == "bystander"
-                else ""
-            )
             report.error(
                 clip_id,
                 f"clip_type {clip_type!r} must have actual_reps == 0 and reps == [] "
-                f"(got actual_reps={actual_reps!r}, {len(reps)} rep row(s)){note}",
+                f"(got actual_reps={actual_reps!r}, {len(reps)} rep row(s))",
             )
-        if clip_type == "bystander" and subject_track_id is None:
-            report.error(clip_id, "bystander clip must mark subject.subject_track_id")
     else:
-        if not isinstance(actual_reps, int) or actual_reps < 0:
+        # normal and bystander both carry a real rep count -- bystander is NOT phantom-like
+        # (EVAL_HARNESS_STAGE0_SPEC.md §5/§7, EXERCISE_LIBRARY.md §5, ROADMAP.md): the user
+        # really exercises while a second person is in frame, so its ground truth is labeled
+        # exactly like a normal clip's, plus a marked subject for subject-lock scoring.
+        if clip_type == "bystander":
+            if not isinstance(actual_reps, int) or actual_reps <= 0:
+                report.error(
+                    clip_id,
+                    f"bystander clip must have actual_reps > 0 (the user's real rep count while "
+                    f"a second person is in frame), got {actual_reps!r}",
+                )
+            if subject_track_id is None:
+                report.error(clip_id, "bystander clip must mark subject.subject_track_id")
+        elif not isinstance(actual_reps, int) or actual_reps < 0:
             report.error(clip_id, f"actual_reps must be a non-negative integer, got {actual_reps!r}")
-        elif len(reps) != actual_reps:
+
+        if isinstance(actual_reps, int) and actual_reps >= 0 and len(reps) != actual_reps:
             report.error(
                 clip_id,
                 f"actual_reps={actual_reps} but {len(reps)} rep row(s) were labeled -- every rep "
                 f"1..actual_reps needs a row (faults: [] for a clean rep)",
             )
-        expected_idx = set(range(1, (actual_reps or 0) + 1))
+        expected_idx = set(range(1, (actual_reps or 0) + 1)) if isinstance(actual_reps, int) else set()
         seen_idx = {r.get("idx") for r in reps}
         if expected_idx and seen_idx != expected_idx:
             report.error(
@@ -240,7 +247,8 @@ def _check_manifest_agreement(
 
 def validate_golden_set(golden_dir: Path, exercise_lib_dir: Optional[Path] = None) -> ValidationReport:
     """Validates every clip in golden_dir: MANIFEST/labels.json agreement, fault-id/severity
-    correctness, phantom/bystander shape, and keypoints.jsonl schema validity. Never raises for a
+    correctness, per-clip-type rep-count shape (phantom_bench/phantom_empty zero-rep,
+    bystander/normal real-rep), and keypoints.jsonl schema validity. Never raises for a
     domain violation -- everything becomes an issue in the returned report; only a genuinely
     unreadable MANIFEST.json/labels.json (bad JSON) is fatal (still reported, not raised)."""
     golden_dir = Path(golden_dir)

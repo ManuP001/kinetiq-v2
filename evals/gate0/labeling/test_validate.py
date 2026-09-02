@@ -65,6 +65,17 @@ def _good_normal_labels(clip_id="squat_clean_side_001", faults=None) -> dict:
     }
 
 
+def _bystander_labels(clip_id="pushup_bystander_001", actual_reps=2, subject_track_id=0) -> dict:
+    reps = [{"idx": i, "faults": []} for i in range(1, actual_reps + 1)]
+    return {
+        "schema_version": 1, "clip_id": clip_id, "exercise": "pushup", "clip_type": "bystander",
+        "view": "front", "lighting": "dim_room", "fitness_level": "beginner",
+        "subject": {"expected": "user", "num_people_in_frame": 2, "subject_track_id": subject_track_id},
+        "ground_truth": {"actual_reps": actual_reps, "reps": reps},
+        "labeler": "PT-AR", "pt_verified": True,
+    }
+
+
 def _phantom_labels(clip_id="squat_bench_phantom_001") -> dict:
     return {
         "schema_version": 1, "clip_id": clip_id, "exercise": "squat", "clip_type": "phantom_bench",
@@ -127,12 +138,34 @@ class TestPhantomClip(LabelingValidateTestCase):
         self.assertFalse(report.ok)
         self.assertTrue(any("actual_reps == 0" in i.message for i in report.errors))
 
+
+class TestBystanderClip(LabelingValidateTestCase):
+    """bystander is NOT phantom-like (the resolved cross-doc decision -- see
+    labeling/validate.py's module docstring): the user really exercises with a real rep count
+    while a second person is in frame, and must mark a subject_track_id for subject-lock."""
+
+    def test_bystander_with_real_reps_and_subject_has_no_errors(self):
+        labels = _bystander_labels(actual_reps=2, subject_track_id=0)
+        _write_clip(self.golden_dir, labels)
+        _write_manifest(self.golden_dir, [_manifest_row(labels)])
+
+        report = validate_golden_set(self.golden_dir)
+
+        self.assertTrue(report.ok, report.format())
+
+    def test_bystander_with_zero_reps_errors(self):
+        labels = _bystander_labels(actual_reps=2, subject_track_id=0)
+        labels["ground_truth"] = {"actual_reps": 0, "reps": []}
+        _write_clip(self.golden_dir, labels)
+        _write_manifest(self.golden_dir, [_manifest_row(labels)])
+
+        report = validate_golden_set(self.golden_dir)
+
+        self.assertFalse(report.ok)
+        self.assertTrue(any("actual_reps > 0" in i.message for i in report.errors))
+
     def test_bystander_without_subject_track_id_errors(self):
-        labels = _phantom_labels(clip_id="pushup_bystander_001")
-        labels["exercise"] = "pushup"
-        labels["clip_type"] = "bystander"
-        labels["subject"]["num_people_in_frame"] = 2
-        labels["subject"]["subject_track_id"] = None
+        labels = _bystander_labels(actual_reps=2, subject_track_id=None)
         _write_clip(self.golden_dir, labels)
         _write_manifest(self.golden_dir, [_manifest_row(labels)])
 

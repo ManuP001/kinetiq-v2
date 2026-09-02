@@ -90,14 +90,19 @@ class TestExportLabels(unittest.TestCase):
         self.assertEqual(labels["view"], "diagonal")
         self.assertIsNone(labels["fitness_level"])  # blank cell -> None
 
-    def test_bystander_clip_carries_subject_track_id(self):
+    def test_bystander_clip_carries_subject_track_id_and_real_reps(self):
+        # bystander is NOT phantom-like (EVAL_HARNESS_STAGE0_SPEC.md §5/§7): the user really
+        # exercises with a real rep count while a second person is in frame.
         clips_csv = self.tmpdir / "clips.csv"
         reps_csv = self.tmpdir / "reps.csv"
         _write_csv(clips_csv, CLIP_HEADER, [
             ("pushup_bystander_002", "pushup", "bystander", "front", "dim_room", "beginner",
-             "0", "2", "0", "PT-AR", "true"),
+             "2", "2", "0", "PT-AR", "true"),
         ])
-        _write_csv(reps_csv, REP_HEADER, [])
+        _write_csv(reps_csv, REP_HEADER, [
+            ("pushup_bystander_002", "1", ""),
+            ("pushup_bystander_002", "2", ""),
+        ])
         golden_dir = self.tmpdir / "golden"
 
         export_labels(clips_csv, reps_csv, golden_dir)
@@ -105,6 +110,8 @@ class TestExportLabels(unittest.TestCase):
         labels = json.loads((golden_dir / "pushup_bystander_002.labels.json").read_text())
         self.assertEqual(labels["subject"]["subject_track_id"], 0)
         self.assertEqual(labels["subject"]["num_people_in_frame"], 2)
+        self.assertEqual(labels["ground_truth"]["actual_reps"], 2)
+        self.assertEqual(len(labels["ground_truth"]["reps"]), 2)
 
     def test_reexport_replaces_only_the_matching_manifest_row(self):
         clips_csv = self.tmpdir / "clips.csv"
