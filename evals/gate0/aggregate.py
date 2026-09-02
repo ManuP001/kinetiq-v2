@@ -213,16 +213,18 @@ def print_stage0_report(clips: list[GoldenClip], mode: str) -> bool:
     print(f"STAGE 0 GOLDEN SET REPORT  (mode: {mode})")
     print("=" * 70)
 
-    # --- rep-count accuracy (normal clips only -- phantom/bystander clips are 0 reps by
-    # construction and are graded by the no-phantom-reps gate below instead) ---
-    normal_clips = [c for c in clips if c.clip_type == "normal"]
+    # --- rep-count accuracy (every clip with a real rep count -- phantom_bench/phantom_empty
+    # are 0 reps by construction and are graded by the no-phantom-reps gate below instead;
+    # bystander is NOT phantom-like (EVAL_HARNESS_STAGE0_SPEC.md §5/§7) and belongs here, same
+    # as a 'normal' clip) ---
+    rep_counted_clips = [c for c in clips if c.clip_type not in PHANTOM_CLIP_TYPES]
     by_exercise: dict[str, list[GoldenClip]] = defaultdict(list)
-    for c in normal_clips:
+    for c in rep_counted_clips:
         by_exercise[c.exercise].append(c)
 
     print(f"\n-- Rep-count accuracy (target {GATE0_TARGET_ACCURACY:.0%}) --")
-    if not normal_clips:
-        print("  (no 'normal' clips in golden set)")
+    if not rep_counted_clips:
+        print("  (no rep-counted clips in golden set)")
     for exercise in sorted(by_exercise):
         recs = [{"actual": c.actual_reps, "detected": c.detected_reps} for c in by_exercise[exercise]]
         acc = weighted_accuracy(recs)
@@ -362,10 +364,12 @@ def print_pose_model_comparison(golden_dir: Path) -> bool:
             continue
         any_clips = True
 
-        normal = [c for c in clips if c.clip_type == "normal"]
+        rep_counted = [c for c in clips if c.clip_type not in PHANTOM_CLIP_TYPES]
         rep_acc = (
-            weighted_accuracy([{"actual": c.actual_reps, "detected": c.detected_reps} for c in normal])
-            if normal else None
+            weighted_accuracy(
+                [{"actual": c.actual_reps, "detected": c.detected_reps} for c in rep_counted]
+            )
+            if rep_counted else None
         )
         phantom_result = score_phantom(clips)
         lock_result = score_subject_lock(clips)
