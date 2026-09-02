@@ -24,12 +24,20 @@ class TestScorePhantom(unittest.TestCase):
         clips = [
             FakeClip("bench_001", "phantom_bench", 0),
             FakeClip("empty_001", "phantom_empty", 0),
-            FakeClip("bystander_001", "bystander", 0),
         ]
         result = score_phantom(clips)
-        self.assertEqual(result.checked, 3)
+        self.assertEqual(result.checked, 2)
         self.assertTrue(result.passed)
         self.assertEqual(result.failures, [])
+
+    def test_bystander_clips_are_ignored(self):
+        # bystander is NOT phantom-like (EVAL_HARNESS_STAGE0_SPEC.md §5/§7): the user's real reps
+        # are scored by subject-lock + rep-accuracy instead, never this zero-reps gate -- a real,
+        # nonzero rep count on a bystander clip must never fail this scorer.
+        clips = [FakeClip("bystander_001", "bystander", 12)]
+        result = score_phantom(clips)
+        self.assertEqual(result.checked, 0)
+        self.assertTrue(result.passed)
 
     def test_nonzero_reps_fails_and_names_the_clip(self):
         clips = [

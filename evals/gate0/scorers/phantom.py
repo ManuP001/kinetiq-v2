@@ -2,11 +2,18 @@
 """
 evals/gate0/scorers/phantom.py
 
-No-phantom-reps gate (EVAL_HARNESS_STAGE0_SPEC.md §5, §7): clips of type phantom_bench,
-phantom_empty, or bystander carry ground_truth.actual_reps == 0 by construction -- an empty
-room, a moved bench, or a bystander moving while the tracked subject does nothing. The detector
-must report zero reps on every one of them. This is exactly the bench->6-reps failure mode
-(EVAL_STRATEGY.md case #1); a single phantom rep on any of these clips is a hard fail.
+No-phantom-reps gate (EVAL_HARNESS_STAGE0_SPEC.md §5, §7): clips of type phantom_bench or
+phantom_empty carry ground_truth.actual_reps == 0 by construction -- an empty room or a moved
+bench, nobody exercising. The detector must report zero reps on every one of them. This is
+exactly the bench->6-reps failure mode (EVAL_STRATEGY.md case #1); a single phantom rep on any of
+these clips is a hard fail.
+
+bystander is deliberately NOT in this gate (the resolved cross-doc decision,
+EVAL_HARNESS_STAGE0_SPEC.md §5/§7, EVAL_STRATEGY.md, EXERCISE_LIBRARY.md §5, ROADMAP.md): the
+user really is exercising while a second person stands nearby, so a bystander clip's real
+rep count is > 0 by construction, not 0. It's scored by scorers/subject_lock.py (does the
+skeleton stay on the user) and folded into ordinary rep-accuracy scoring instead -- treating it
+as phantom here would hard-fail every correctly-functioning bystander clip.
 """
 from __future__ import annotations
 
@@ -15,7 +22,7 @@ from typing import Any, Iterable, List
 
 import gate_config
 
-PHANTOM_CLIP_TYPES = ("phantom_bench", "phantom_empty", "bystander")
+PHANTOM_CLIP_TYPES = ("phantom_bench", "phantom_empty")
 
 
 @dataclass
