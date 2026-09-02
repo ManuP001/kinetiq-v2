@@ -360,9 +360,21 @@ skeleton stays on the user (subject-lock, `scorers/subject_lock.py`) *while stil
 user's real reps* -- it flows into ordinary rep-accuracy and form-P/R scoring exactly like a
 `normal` clip, and `scorers/phantom.py`'s zero-reps gate never touches it.
 
+## Live detector API: `prototype_api/`
+
+Step 1 of the live-vision-prototype build (`VISION_ARCHITECTURE.md`): a thin FastAPI service that
+wraps `detector/adapter.py`'s `run_detector` so the live prototype and this eval harness share
+**one detector** -- no JS reimplementation, no logic drift. `python -m prototype_api` runs it
+locally; see `prototype_api/README.md` for the full request/response contract, session-buffering
+model, and the interim (not Stage-6) coaching-cue layer. `prototype_api/test_parity.py` is the
+proof this actually holds: the API's result for a given frame sequence is asserted identical to
+calling `run_detector` directly, against real golden-set fixtures.
+
 ## Unit tests
 
-Stdlib `unittest`, no dependencies. Run from this directory or the repo root:
+Stdlib `unittest` except `prototype_api/` (needs `pip install -r prototype_api/requirements.txt`
+-- FastAPI/uvicorn/pydantic/httpx; everything else in this directory is still dependency-free).
+Run from this directory or the repo root:
 
 ```
 python -m unittest discover -s evals/gate0 -p "test_*.py" -v
@@ -381,4 +393,7 @@ bake-off table and the Stage-3 insufficient-evidence report section; `labeling/t
 the CSV-template writer, the exporter (good clip, phantom clip, duplicate/malformed rows), and the
 validator (a good clip, a phantom clip, an unknown fault id, and a fault whose exercise-library
 entry has no severity at all, via a temp library override -- the real `exercises/*.json` always
-declare one today).
+declare one today); `prototype_api/test_*.py` cover the session buffer, the interim cue layer
+(against the real exercise library -- this is what proves two of its cues are genuinely over the
+word cap), the HTTP contract, and `test_parity.py`'s core "API == run_detector" proof (see
+`prototype_api/README.md`, above).
