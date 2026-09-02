@@ -7,23 +7,26 @@ Pose Landmarker task. Landmark index -> name mapping lives in detector/keypoint_
 here -- this module only runs the model and emits its raw 33-point output in MediaPipe's
 standard order; keypoint_map.py is what makes that order legible to the rest of the harness.
 
-NOT RUNNABLE IN THIS REPO'S DEV ENVIRONMENT: `mediapipe` isn't installed here (checked via
-`import mediapipe` -- ModuleNotFoundError), and there is no recorded video to run it over yet
-either (GOLDEN_SET_PROTOCOL.md's real clips don't exist -- that's the point of this stage).
-is_available() correctly reports False here; infer_frames()'s body below is a best-effort sketch
-of the real MediaPipe Tasks video-mode API (detect_for_video with monotonically increasing
-timestamps, world landmarks for pseudo-3D), NOT verified against a live installation -- run
-`python -m detector.pose_capture --model blazepose_33 --dry-run` to confirm the schema/writer
-plumbing is correct, then validate this sketch's exact API calls against the current MediaPipe
-docs (https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker/python) on a machine
-that has mediapipe installed before trusting its output.
+LIVE-TESTED (pose_capture/README.md): confirmed end-to-end against a real video on
+mediapipe 1.0.1, using the `pose_landmarker_full` (float16) .task model
+(https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task).
+`PoseLandmarkerOptions` accepts `num_poses` (default 1, single-person) -- ADR-300 requires this
+set >1 so subject-lock has more than one candidate to choose among; verified live that
+`num_poses=2` runs without error and `pose_landmarks` (frame-normalized, see below) populate
+x/y/z/visibility for every returned pose. The model .task file is resolved via
+`KINETIQ_POSE_LANDMARKER_PATH` (env var) so a capture machine doesn't have to keep the file next
+to the video; falls back to a `pose_landmarker.task` in the current working directory if unset.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Dict, Iterator
 
 from detector.pose_capture.base import PoseCaptureAdapter, PoseRuntimeUnavailable
+
+# ADR-300: natively multi-person via num_poses > 1 (no separate person_detector needed).
+_NUM_POSES = 2
 
 
 class BlazePoseAdapter(PoseCaptureAdapter):
@@ -39,8 +42,9 @@ class BlazePoseAdapter(PoseCaptureAdapter):
     def install_hint(self) -> str:
         return (
             "pip install mediapipe opencv-python; download a Pose Landmarker .task model "
-            "(https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker#models) to "
-            "pose_landmarker.task next to the video; then run this adapter for real."
+            "(https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker#models) and "
+            "point KINETIQ_POSE_LANDMARKER_PATH at it (or leave it next to the cwd as "
+            "pose_landmarker.task); then run this adapter for real."
         )
 
     def infer_frames(self, video_path: Path) -> Iterator[Dict[str, Any]]:
@@ -50,10 +54,12 @@ class BlazePoseAdapter(PoseCaptureAdapter):
         import cv2
         import mediapipe as mp
 
-        base_options = mp.tasks.BaseOptions(model_asset_path="pose_landmarker.task")
+        model_path = os.environ.get("KINETIQ_POSE_LANDMARKER_PATH", "pose_landmarker.task")
+        base_options = mp.tasks.BaseOptions(model_asset_path=model_path)
         options = mp.tasks.vision.PoseLandmarkerOptions(
             base_options=base_options,
             running_mode=mp.tasks.vision.RunningMode.VIDEO,
+            num_poses=_NUM_POSES,
         )
         cap = cv2.VideoCapture(str(video_path))
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -65,13 +71,22 @@ class BlazePoseAdapter(PoseCaptureAdapter):
                     if not ok:
                         break
                     t_ms = int(frame_idx * 1000 / fps)
-                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
+                    # cv2 reads BGR; mp.Image declared SRGB needs an explicit conversion or every
+                    # frame is fed to the model with red/blue channels swapped (caught live this
+                    # session -- the original sketch passed raw BGR `image` here).
+                    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                     result = landmarker.detect_for_video(mp_image, t_ms)
 
                     people = []
-                    # world landmarks give pseudo-3D (VISION_ARCHITECTURE.md §2: "3D where
-                    # available ... reduces the 2D-projection errors behind RC5").
-                    for track_id, pose in enumerate(result.pose_world_landmarks or []):
+                    # `pose_landmarks` (not `pose_world_landmarks`): frame-normalized [0, 1]
+                    # x/y matching EVAL_HARNESS_STAGE0_SPEC.md's schema and subject_lock.py's
+                    # "most_central" rule (distance to frame centre (0.5, 0.5)) -- caught live
+                    # this session that the original sketch used `pose_world_landmarks` (real-
+                    # world meters, hip-centred, can be negative/unbounded), which would silently
+                    # break subject-lock's centroid math. `pose_landmarks` still carries a z (§2:
+                    # "3D where available"), just relative rather than metric.
+                    for track_id, pose in enumerate(result.pose_landmarks or []):
                         kp = [[lm.x, lm.y, lm.z, lm.visibility] for lm in pose]
                         xs = [lm.x for lm in pose]
                         ys = [lm.y for lm in pose]
