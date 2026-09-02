@@ -202,22 +202,47 @@ FORM_SCORE_PENALTY_PER_FLAG: float = 2.5
 # candidates for fixing the front/side rep-count gap (RC5). approx_size_mb is None until someone
 # actually installs the runtime and measures the weights file(s) -- never a guessed number; the
 # bake-off table prints "n/a" rather than a fabricated size.
+#
+# ADR-300 (ARCHITECTURE.md): every candidate must yield ALL people in frame, not just top-1, or
+# subject-lock (RC1) has nothing to choose among. multi_person is True for every candidate below
+# -- a candidate that can't satisfy this is out of the bake-off per the ADR. person_detector names
+# the external detector a top-down pose model is paired with (null for a natively multi-person
+# model). multi_person_config carries the exact knobs a capture adapter needs to reproduce the
+# multi-person configuration -- never re-derive/guess these from the adapter code.
 POSE_MODEL_CANDIDATES: tuple[dict[str, Any], ...] = (
     {
         "name": "blazepose_33",
         "landmark_count": 33,
         "dimensionality": "3d",
         "runtime": "mediapipe",
-        "weights_ref": "MediaPipe Pose Landmarker (BlazePose GHUM, 'full' complexity)",
-        "approx_size_mb": None,
+        "weights_ref": "MediaPipe Tasks PoseLandmarker (BlazePose GHUM, 'full' complexity)",
+        "approx_size_mb": 9.0,  # pose_landmarker_full float16 .task, live-measured 2026-09-01.
+        "multi_person": True,
+        "person_detector": None,  # natively multi-person via num_poses > 1.
+        "multi_person_config": {"num_poses": 2},
     },
     {
         "name": "movenet_17",
         "landmark_count": 17,
         "dimensionality": "2d",
         "runtime": "tensorflow",
-        "weights_ref": "TensorFlow Hub MoveNet SinglePose Thunder",
+        # ADR-300: SinglePose Thunder (the pre-ADR-300 choice) returns exactly one pose and can't
+        # feed subject-lock at all -- replaced with the MultiPose variant. Lightning (not Thunder)
+        # is TF Hub's only MultiPose variant as of this bake-off; there is no MultiPose Thunder.
+        "weights_ref": "TensorFlow Hub MoveNet MultiPose Lightning",
         "approx_size_mb": None,
+        "multi_person": True,
+        "person_detector": None,  # natively multi-person (fixed 6-instance output).
+        "multi_person_config": {
+            "variant": "multipose_lightning",
+            "max_instances": 6,  # fixed by the model's output_0 shape [1, 6, 56].
+            # Filters MultiPose's fixed 6 output slots down to slots the model actually
+            # populated (score column 55 of each 56-wide row) -- a structural "is this slot a
+            # real detection" gate, not a Stage-3 form-flagging confidence cutoff. Left at TF
+            # Hub's own tutorial default; not tuned against golden-set data (PARALLEL_PLAN.md
+            # blocks value tuning until real recordings land).
+            "instance_score_threshold": 0.1,
+        },
     },
     {
         "name": "rtmpose_halpe26",
@@ -226,9 +251,14 @@ POSE_MODEL_CANDIDATES: tuple[dict[str, Any], ...] = (
         "runtime": "rtmlib",
         # RTMPose-m over plain-COCO: Halpe-26 (the combined "Body8" training set) adds head/neck/
         # hip-center/toe/heel points, closer to BlazePose's richness -- see
-        # evals/gate0/README.md's bake-off section for the reasoning behind this choice.
-        "weights_ref": "RTMPose-m, Halpe-26 (Body8 combined-dataset weights, mmpose model zoo)",
+        # evals/gate0/README.md's bake-off section for the reasoning behind this choice. Halpe-26
+        # lives behind rtmlib's `BodyWithFeet` class specifically -- `Body` (despite the similar
+        # name) loads plain-COCO-17 weights; live-verified 2026-09-01 (pose_capture/README.md).
+        "weights_ref": "RTMPose-m, Halpe-26 (body7-halpe26 weights, mmpose model zoo, via rtmlib BodyWithFeet)",
         "approx_size_mb": None,
+        "multi_person": True,
+        "person_detector": "yolox (rtmlib-bundled, runs internally)",  # top-down.
+        "multi_person_config": {"mode": "balanced"},
     },
 )
 
