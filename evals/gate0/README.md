@@ -370,6 +370,48 @@ model, and the interim (not Stage-6) coaching-cue layer. `prototype_api/test_par
 proof this actually holds: the API's result for a given frame sequence is asserted identical to
 calling `run_detector` directly, against real golden-set fixtures.
 
+## Effectiveness report: `effectiveness_report.py`
+
+Step 3 of the live-vision-prototype build: turns one `kinetiq-demo3` session export + a trainer's
+filled fault labels into a single effectiveness read — rep-accuracy plus form precision/recall and
+insufficient-evidence counts, via the exact scorers the golden-set gate uses. Pure glue: no new
+scoring rule, no reimplementation — `labeling/export.py` and `labeling/validate.py` build the
+golden set exactly as they already do, `scorers/form_pr.py` scores it exactly as `aggregate.py`
+does, and a parity check compares the live app's own `detected.json` against a fresh offline
+`run_detector` recompute over the same `keypoints.jsonl` (they should always agree; a mismatch
+means a client/API buffer desync, not a scoring disagreement — see the script's module docstring).
+
+### Runbook
+
+1. **Record.** Run `kinetiq-demo3` against a real, reachable `prototype_api` — pick an exercise,
+   do a real set, Stop, enter the actual rep count, Export bundle. This downloads a `.zip`; unzip
+   it somewhere (`<clip_id>.keypoints.jsonl`, `<clip_id>.detected.json`, `clips_template.csv`,
+   `reps_template.csv`, `README.txt` — see `kinetiq-demo3/README.md`'s "Effectiveness capture").
+
+2. **Trainer labels (a human step — this tool never fabricates it).** Open
+   `reps_template.csv` and fill in the blank `faults` column per rep (`;`-separated `error_id`s
+   from `exercises/<exercise>.json`, blank = clean rep) based on what the trainer actually
+   observed live — there is no video to review. Once done, set `pt_verified` to `true` in
+   `clips_template.csv`. `effectiveness_report.py` refuses to score a clip whose `pt_verified` is
+   still `false` by default (blank faults are ambiguous between "clean, confirmed" and "not
+   reviewed yet" — only this flag tells them apart); `--allow-unverified` overrides it for a
+   preview, but a preview's numbers are never a real result.
+
+3. **One command:**
+   ```
+   python effectiveness_report.py --bundle-dir <unzipped bundle dir> --golden golden_local/
+   ```
+   Runs `labeling export` → `labeling validate` (writing/merging into `--golden`, exactly as the
+   existing workflow already does — see `Labeling: labeling/` above), the parity check, then
+   prints rep-accuracy + severity-gated per-flag precision/recall + insufficient-evidence, all
+   under a loud caveat header (small n, single-user BlazePose only — no subject-lock is exercised
+   at all, interim non-Stage-6 cues, and a reminder that only a real camera session's numbers
+   mean anything — never a stubbed/Playwright run's). Exits non-zero if the parity check fails or
+   the trainer-verification gate blocks; the `--golden` directory it writes is a normal golden
+   set afterward — re-run `aggregate.py --golden golden_local/ --mode full` or
+   `--compare-pose-models` on it directly, and it merges with any other clips already there
+   rather than overwriting them.
+
 ## Unit tests
 
 Stdlib `unittest` except `prototype_api/` (needs `pip install -r prototype_api/requirements.txt`
@@ -396,4 +438,9 @@ entry has no severity at all, via a temp library override -- the real `exercises
 declare one today); `prototype_api/test_*.py` cover the session buffer, the interim cue layer
 (against the real exercise library -- this is what proves two of its cues are genuinely over the
 word cap), the HTTP contract, and `test_parity.py`'s core "API == run_detector" proof (see
-`prototype_api/README.md`, above).
+`prototype_api/README.md`, above); `test_effectiveness_report.py` covers a synthetic
+kinetiq-demo3-shaped bundle end-to-end (clean-clip scoring, a seeded fault's false-negative, the
+trainer-verification gate blocking/allowing, and a deliberately corrupted `detected.json` proving
+the parity check actually catches a real live/offline divergence) -- also verified by hand against
+a real bundle exported by a live-driven `kinetiq-demo3` session (see the script's own runbook,
+above).
