@@ -46,6 +46,10 @@ def _expected_fields(direct):
         "subject_lock_ok": bool(
             direct.subject_track_sequence and direct.subject_track_sequence[-1] is not None
         ),
+        "reps": [
+            {"idx": r.idx, "flags": r.flags, "insufficient_evidence": r.insufficient_evidence}
+            for r in direct.reps
+        ],
     }
 
 

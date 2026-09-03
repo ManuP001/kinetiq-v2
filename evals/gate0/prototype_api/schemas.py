@@ -27,6 +27,12 @@ class AssessRequest(BaseModel):
     reset: bool = False
 
 
+class RepResult(BaseModel):
+    idx: int
+    flags: List[str]
+    insufficient_evidence: List[str]
+
+
 class AssessResponse(BaseModel):
     rep_count: int
     rep_in_progress: bool
@@ -38,6 +44,13 @@ class AssessResponse(BaseModel):
     # Not part of the originally-specified 7-field contract -- added to satisfy "flag, don't
     # silently truncate" an over-LIVE_CUE_MAX_WORDS cue (cues.py). None on every normal response.
     cue_warning: Optional[str] = None
+    # Also not part of the original 7-field contract -- added for the live-prototype's bundle
+    # export (kinetiq-demo3): the FULL per-rep history (run_detector's DetectedClip.reps already
+    # computes this every call; current_flags only ever showed the latest one). Necessary, not
+    # optional: a client polling every ~300-500ms can have 2+ reps close between two calls, and
+    # current_flags alone would silently lose the intermediate rep's flags -- exactly the kind of
+    # quiet eval-data corruption this project's discipline exists to prevent.
+    reps: List[RepResult]
 
 
 class ErrorResponse(BaseModel):

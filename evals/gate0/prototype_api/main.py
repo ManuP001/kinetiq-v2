@@ -37,7 +37,7 @@ from detector.exercise_signals import scoped_exercises
 from golden_loader import validate_frame_schema
 
 from prototype_api.cues import CueResult, cue_for_rep
-from prototype_api.schemas import AssessRequest, AssessResponse
+from prototype_api.schemas import AssessRequest, AssessResponse, RepResult
 from prototype_api.session_buffer import SessionBufferFullError, SessionBufferStore
 
 logger = logging.getLogger("prototype_api")
@@ -145,4 +145,8 @@ def assess(body: AssessRequest) -> AssessResponse:
         subject_lock_ok=subject_lock_ok,
         coaching_cue=cue.text,
         cue_warning=_cue_warning(current_flags, cue),
+        reps=[
+            RepResult(idx=r.idx, flags=r.flags, insufficient_evidence=r.insufficient_evidence)
+            for r in detected.reps
+        ],
     )

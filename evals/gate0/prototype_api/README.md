@@ -71,7 +71,11 @@ is partially appended.
   "insufficient_evidence": [],
   "subject_lock_ok": true,
   "coaching_cue": "Full range — great push-up",
-  "cue_warning": null
+  "cue_warning": null,
+  "reps": [
+    {"idx": 1, "flags": [], "insufficient_evidence": []},
+    {"idx": 2, "flags": [], "insufficient_evidence": []}
+  ]
 }
 ```
 
@@ -85,6 +89,7 @@ is partially appended.
 | `subject_lock_ok` | bool | is the locked subject present in the most recent frame (`subject_track_sequence[-1] is not None`) |
 | `coaching_cue` | str \| null | see "Coaching cue layer" below; `null` if no rep has completed yet |
 | `cue_warning` | str \| null | **not part of the original 7-field spec** — see below; `null` on every normal response |
+| `reps` | list[{idx, flags, insufficient_evidence}] | **not part of the original 7-field spec either** — the FULL per-rep history (every completed rep, not just the latest). `current_flags`/`insufficient_evidence` are redundant with `reps[-1]` and kept only for backward compatibility with the original contract; a new client should read `reps`. Necessary because a client polling every ~300–500ms (kinetiq-demo3) can have 2+ reps close between two calls -- `current_flags` alone would silently lose the intermediate rep's flags, corrupting exactly the data `labeling/`/`form_pr.py` score later. |
 
 **Error responses** (structured, not a bare stack trace):
 

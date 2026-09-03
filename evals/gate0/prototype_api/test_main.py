@@ -144,6 +144,29 @@ class TestSessionBufferSafeguard(unittest.TestCase):
             main_module._buffers = original_store
 
 
+class TestRepsHistory(PrototypeApiTestCase):
+    """AssessResponse.reps -- the full per-rep history, not just the latest (added for
+    kinetiq-demo3's bundle export; see schemas.py's docstring on why current_flags alone is
+    unsafe for that)."""
+
+    def test_reps_lists_every_completed_rep_not_just_the_latest(self):
+        resp = self.client.post("/prototype/assess", json={
+            "session_id": "reps-history", "exercise_id": "pushup",
+            "frames": self.frames, "reset": True,
+        })
+        body = resp.json()
+        self.assertEqual(len(body["reps"]), 2)
+        self.assertEqual([r["idx"] for r in body["reps"]], [1, 2])
+        self.assertEqual(body["reps"][-1]["flags"], body["current_flags"])
+
+    def test_reps_is_empty_before_any_rep_completes(self):
+        resp = self.client.post("/prototype/assess", json={
+            "session_id": "reps-history-empty", "exercise_id": "pushup",
+            "frames": self.frames[:5], "reset": True,
+        })
+        self.assertEqual(resp.json()["reps"], [])
+
+
 class TestCoachingCue(PrototypeApiTestCase):
     def test_no_completed_rep_yet_has_no_cue(self):
         resp = self.client.post("/prototype/assess", json={
