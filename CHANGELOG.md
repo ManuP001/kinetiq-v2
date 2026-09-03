@@ -5,6 +5,64 @@ Format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.7.0] — 2026-09-03 — v3 Stage 5a: 11 new exercise contracts (preponed, still gated)
+
+Kinetiq v3 Stage 5a, run in parallel with GATE G-REAL per the task brief: authors the exercise
+CONTRACT JSON for the 11 requested exercises beyond squat/pushup/lunge
+(`../kinetiq v3/EXERCISE_LIBRARY.md` §3's 14-exercise table). **Spec/data only** -- no detector
+change, no new landmark, nothing goes vision-live. `detector/exercise_signals.scoped_exercises()`
+(the Stage-1 detector's real scope) and `prototype_api`'s `SUPPORTED_EXERCISES` both remain exactly
+`(squat, pushup, lunge)`, unchanged and unaffected by these 11 files existing -- verified live, not
+assumed.
+
+### Added
+
+- `exercises/{pull_up,plank,leg_raise,hanging_leg_raise,overhead_press,arnold_press,bicep_curl,
+  triceps_pushdown,hamstring_curl,bench_press,deadlift}.json` -- one contract each, same shape as
+  the existing 3 (`schema_version: 2`, `reference_keypoints.correct.key_angles` +
+  `common_errors[]`, `thresholds`, `rep_counting`, `coaching_cues`, `contraindications`,
+  `model_assist`), extended with the v3-only fields `EXERCISE_LIBRARY.md` §4 calls for:
+  `tier` (A/B/C), `movement_type` (`rep` | `hold`), `vision_support: false` on all 11.
+  `camera_guidance` (also named in §4) is deliberately NOT added -- not in the build task's
+  explicit field list and not present on the existing 3 either.
+- All 14 exercises now load via `config.load_exercise_library()`; every fault on every one of the
+  11 new files carries a valid severity and normalizes through `exercise_lib.py`'s existing
+  `medium` -> `med` alias (not re-decided here, per the build task).
+- Every `good_rep` and `flag_cues` entry across all 11 is <= `LIVE_CUE_MAX_WORDS` (8), counted the
+  same way `prototype_api/cues.py` and `aggregate.py`'s Stage-0 assertion already do -- caught and
+  fixed one over-cap draft (`bench_press.depth`, originally 9 words) before it became a second
+  instance of the already-known `squat.shallow_depth`/`pushup.shallow_pushup` mistake (those two
+  remain as-is; out of scope for this release).
+- **5 faults marked `status: "needs_pt_confirmation"`** (severity `high`, no threshold value
+  seeded -- `null` in `thresholds`, not invented) rather than guessing a safety-relevant geometric
+  rule, mirroring `lunge.json`'s existing `unresolved_spec_conflict` pattern:
+  `deadlift.lumbar_flexion`, `bench_press.excessive_lumbar_arch`,
+  `bench_press.excessive_elbow_flare`, `overhead_press.lumbar_hyperextension` (all named
+  explicitly in the build task), plus `arnold_press.lumbar_arch` (not named in the task, but the
+  identical injury mechanism as `overhead_press` -- extended the same treatment deliberately rather
+  than guessing a threshold for one press variant and not its close relative; flagged for review).
+- Two landmark-availability gaps, noted rather than papered over with an invented landmark:
+  `plank`'s "neck alignment" key fault (`EXERCISE_LIBRARY.md` §3) has no common_error entry --
+  there is no head/neck landmark in `detector/keypoint_map.py`'s `POSE_MODEL_LANDMARKS`.
+  `arnold_press`'s "rotation path" likewise has none -- the Stage-0 keypoint schema carries
+  landmark position (x/y/z/visibility) only, not wrist/forearm orientation.
+- One structural note for whoever scopes Stage 5b: `triceps_pushdown`'s primary joint-angle signal
+  moves in the OPPOSITE direction from every other exercise here (its rest reference is elbow
+  FLEXED, its effort peak is full extension) -- the generic rep-counter FSM
+  (`detector/rep_counter.py`) assumes rest=peak-angle/effort=trough-angle, so this one will need an
+  inverted signal, not a straight port of the squat/pushup pattern. Documented in the file's own
+  `rep_counting._note`, not solved here (Stage 5b is out of scope for this release).
+
+### Not changed
+
+- `exercises/{squat,pushup,lunge}.json` -- untouched.
+- `detector/exercise_signals.py`, `prototype_api/`, and every other consumer of the Stage-1
+  detector -- untouched; still scoped to squat/pushup/lunge only.
+- `backend/app/core/schemas.py`'s `ExerciseId` (currently `Literal["squat", "pushup", "lunge"]`)
+  -- deliberately left alone. Expanding it is product-API/backend wiring (whenever `/v2`'s backend
+  scaffold actually gets built, `PARALLEL_PLAN.md` T3-a), not contract authoring, and touching it
+  would read as a step toward these exercises going live, which this release explicitly is not.
+
 ## [0.6.0] — 2026-09-01 — v3 Stage 3: flag-level hysteresis + visibility gating
 
 Kinetiq v3's Stage 3, re-scoped per the task brief: `ROADMAP.md`'s literal Stage-3 entry (rep-
