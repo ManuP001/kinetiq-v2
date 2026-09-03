@@ -144,6 +144,19 @@ class TestSessionBufferSafeguard(unittest.TestCase):
             main_module._buffers = original_store
 
 
+class TestCors(PrototypeApiTestCase):
+    def test_cross_origin_request_gets_an_allow_origin_header(self):
+        # the PWA client is served from a different origin than this API -- without this header
+        # the browser blocks every call before it ever reaches this code.
+        resp = self.client.post(
+            "/prototype/assess",
+            json={"session_id": "cors-check", "exercise_id": "squat", "frames": [], "reset": True},
+            headers={"Origin": "https://example.com"},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNotNone(resp.headers.get("access-control-allow-origin"))
+
+
 class TestRepsHistory(PrototypeApiTestCase):
     """AssessResponse.reps -- the full per-rep history, not just the latest (added for
     kinetiq-demo3's bundle export; see schemas.py's docstring on why current_flags alone is

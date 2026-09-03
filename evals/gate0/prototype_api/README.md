@@ -25,6 +25,36 @@ python -m prototype_api
 Starts uvicorn on `http://127.0.0.1:8000` (single worker, no reload, no TLS — development only).
 Interactive docs at `http://127.0.0.1:8000/docs`.
 
+## CORS (needed for kinetiq-demo3, or any other browser client)
+
+The PWA client is served from a different origin than wherever this process runs, so the browser
+enforces CORS on every request — without it, every call is blocked before it reaches this code.
+`PROTOTYPE_API_CORS_ORIGINS` (env var, comma-separated) sets the allowed origins; defaults to `*`
+(any origin). That default is a **deliberate prototype-only choice** — no auth, no cookies, only
+keypoints cross this API, so an open origin list doesn't expose anything sensitive. Do not carry
+`*` into the real `/v2` product API.
+
+```
+PROTOTYPE_API_CORS_ORIGINS="https://your-pwa.example.com" python -m prototype_api
+```
+
+## Reaching this API from a phone
+
+The PWA needs an HTTPS URL for this API reachable from the phone's network — `localhost` only
+works for a browser running on the same machine as this process. Two options for local device
+testing without a real deployment:
+
+- **A tunnel** (`ngrok http 8000`, or similar) — gives you an HTTPS URL forwarding to your
+  local `python -m prototype_api`. Fastest for one-off device testing; the tunnel URL changes
+  every run unless you're on a paid tier with a reserved domain.
+- **A real hosted deployment** (Render/Fly/Railway, etc.) — see `../kinetiq-demo2/README.md`'s
+  "Deploying" section for the no-build static-site pattern this project already uses for the
+  *client*; this API is a Python process, not a static site, so it needs a host that runs one
+  (Render's free "Web Service" tier works for a prototype).
+
+Either way, set the resulting HTTPS URL as `kinetiq-demo3`'s API base URL (see its own README) and
+`PROTOTYPE_API_CORS_ORIGINS` to the PWA's own deployed origin once that's known too.
+
 ## The contract
 
 ### `POST /prototype/assess`

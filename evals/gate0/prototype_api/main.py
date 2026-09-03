@@ -22,13 +22,22 @@ ever reaches the detector.
 Recompute-over-buffer latency: run_detector re-runs over the WHOLE accumulated session buffer on
 every call (simplest-correct choice for a prototype-length set, per-call cost O(frames-so-far),
 not O(new frames)). PROTOTYPE_SESSION_MAX_FRAMES (config.py) bounds how large that can grow.
+
+CORS: the PWA client (kinetiq-demo3) is served from a different origin than this API (a static
+host vs. wherever this process runs), so the browser enforces CORS on every request -- without it
+enabled, every call fails before it reaches this code at all. PROTOTYPE_API_CORS_ORIGINS (env var,
+comma-separated) controls allowed origins; defaults to "*" (allow any). This is a deliberate
+prototype-only choice: there's no auth and no cookies, only keypoints cross this API, so an open
+origin list doesn't expose anything sensitive -- do not carry "*" into the real /v2 product API.
 """
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, List
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import gate_config
@@ -44,12 +53,25 @@ logger = logging.getLogger("prototype_api")
 
 SUPPORTED_EXERCISES = scoped_exercises()  # single source: detector/exercise_signals.py
 
+_CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("PROTOTYPE_API_CORS_ORIGINS", "*").split(",")
+    if origin.strip()
+]
+
 app = FastAPI(
     title="Kinetiq v3 -- prototype detector API",
     description=(
         "Step 1 of the live-vision-prototype build: a thin wrapper around the eval-validated "
         "run_detector. See evals/gate0/prototype_api/README.md for the full contract."
     ),
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_CORS_ORIGINS,
+    allow_methods=["POST"],
+    allow_headers=["Content-Type"],
 )
 
 _buffers = SessionBufferStore()
