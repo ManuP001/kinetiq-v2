@@ -1,0 +1,103 @@
+{
+  "exercise_id": "triceps_pushdown",
+  "schema_version": 2,
+  "name": "Triceps Rope Pushdown",
+  "demo_video_url": "TBD",
+  "tier": "C",
+  "movement_type": "rep",
+  "target_muscles": ["triceps"],
+  "difficulty": "beginner",
+  "equipment": ["cable_machine"],
+  "is_premium": false,
+  "estimated_duration_seconds": 75,
+  "reference_keypoints": {
+    "correct": {
+      "description": "Elbows stay pinned at the sides, handle starts near the chest and is pushed down to full extension with control",
+      "key_angles": {
+        "elbow_angle_at_rest": { "min": 80, "max": 100 },
+        "elbow_angle_at_full_extension": { "min": 160, "max": 180 }
+      }
+    },
+    "common_errors": [
+      {
+        "error_id": "elbow_drift",
+        "description": "Elbows drift away from the torso instead of staying pinned",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "abs(elbow.x - hip.x) - abs(elbow.x_at_rep_start - hip.x) > threshold.pushdown_elbow_drift_x",
+          "threshold_key": "pushdown_elbow_drift_x",
+          "phase_detected_in": ["descending", "bottom"]
+        }
+      },
+      {
+        "error_id": "torso_lean_momentum",
+        "description": "Torso leans into the pushdown to help generate momentum",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "torso_lean_degrees > threshold.pushdown_torso_lean_max_deg",
+          "threshold_key": "pushdown_torso_lean_max_deg",
+          "phase_detected_in": ["descending"]
+        }
+      },
+      {
+        "error_id": "partial_rom",
+        "description": "Handle does not reach full extension at the bottom",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "elbow_angle_at_bottom_of_rep < threshold.pushdown_partial_rom_elbow_min",
+          "threshold_key": "pushdown_partial_rom_elbow_min",
+          "phase_detected_in": ["bottom"]
+        }
+      }
+    ]
+  },
+  "thresholds": {
+    "_status": "SEED values only -- placeholders pending real field-measured tuning per EXERCISE_LIBRARY.md §4. Not authoritative; do not treat as validated.",
+    "pushdown_elbow_drift_x": 0.06,
+    "pushdown_torso_lean_max_deg": 15,
+    "pushdown_partial_rom_elbow_min": 160
+  },
+  "rep_counting": {
+    "phases": ["top", "descending", "bottom", "ascending"],
+    "rep_complete_transition": "ascending_to_top",
+    "bottom_position_criterion": "elbow_fully_extended_handle_down",
+    "top_position_criterion": "elbow_flexed_handle_at_chest_rest",
+    "_note": "SIGNAL-DIRECTION INVERSION vs. most other exercises: a pushdown's between-reps REST reference is elbow FLEXED (~90 degrees, low angle), and its effort PEAK is full EXTENSION (~170 degrees, high angle) -- the opposite of squat/pushup/curl/press, where rest=high-angle/extended and peak=low-angle/flexed. \"top\"/\"bottom\" here are labeled by INTUITIVE rest-vs-peak meaning (top=between-reps reference, bottom=target ROM), not by which numeric angle is literally larger. Flagged explicitly for whoever wires Stage 5b: the generic rep-counter FSM (detector/rep_counter.py) assumes rest=peak-angle/effort=trough-angle, so this exercise's primary-angle signal will need inverting (e.g. track 180-elbow_angle, or a re-derived signal) rather than being fed raw elbow angle like the other exercises."
+  },
+  "coaching_cues": {
+    "setup": "Elbows at your sides, handle near your chest",
+    "execution": "Push down to full extension, keep elbows still",
+    "good_rep": "Full extension — elbows stayed still",
+    "set_complete_no_flags": "Great set. Elbows locked in place.",
+    "set_complete_with_flags": "Good set. Next time, watch your {flag_body_part} — {flag_cue}.",
+    "flag_cues": {
+      "elbow_drift": "Keep your elbows pinned to your sides",
+      "torso_lean_momentum": "Stand tall, avoid leaning forward",
+      "partial_rom": "Push all the way to full extension"
+    }
+  },
+  "contraindications": {
+    "elbow_injury": {
+      "flag": true,
+      "modification": "Reduce weight and range of motion. Stop if you feel elbow pain.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "wrist_injury": {
+      "flag": true,
+      "modification": "Use a straight-bar attachment instead of rope, or reduce weight.",
+      "show_on": ["exercise_detail"]
+    },
+    "hypertension": {
+      "flag": false,
+      "modification": "Avoid breath-holding. Breathe out as you push down.",
+      "show_on": ["exercise_detail"]
+    }
+  },
+  "model_assist": {
+    "enabled": false,
+    "feature_window_frames": 10,
+    "derived_features": ["left_elbow_angle", "right_elbow_angle", "elbow_drift_x", "torso_lean_deg", "symmetry", "tempo_ms"],
+    "notes": "Advisory only. May detect rule-less errors (e.g. shoulder shrug compensation, uneven push). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "vision_support": false
+}

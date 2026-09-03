@@ -1,0 +1,92 @@
+{
+  "exercise_id": "hamstring_curl",
+  "schema_version": 2,
+  "name": "Hamstring Curl",
+  "demo_video_url": "TBD",
+  "tier": "C",
+  "movement_type": "rep",
+  "target_muscles": ["hamstrings"],
+  "difficulty": "beginner",
+  "equipment": ["machine"],
+  "is_premium": false,
+  "estimated_duration_seconds": 75,
+  "reference_keypoints": {
+    "correct": {
+      "description": "Legs start extended, curl the pad toward the glutes with control, hips stay flat against the pad throughout",
+      "key_angles": {
+        "knee_angle_at_top": { "min": 160, "max": 180 },
+        "knee_angle_at_bottom": { "min": 40, "max": 70 }
+      }
+    },
+    "common_errors": [
+      {
+        "error_id": "hip_lift_off_pad",
+        "description": "Hips lift off the pad to help generate momentum instead of an isolated curl",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "abs(hip.y - hip.y_at_rep_start) > threshold.hamcurl_hip_lift_y",
+          "threshold_key": "hamcurl_hip_lift_y",
+          "phase_detected_in": ["descending", "bottom"]
+        }
+      },
+      {
+        "error_id": "partial_rom",
+        "description": "Curl does not reach full flexion at the bottom",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "knee_angle_at_bottom_of_rep > threshold.hamcurl_partial_rom_knee_max",
+          "threshold_key": "hamcurl_partial_rom_knee_max",
+          "phase_detected_in": ["bottom"]
+        }
+      }
+    ],
+    "_equipment_note": "\"machine\" occludes much of the lower body from most camera angles (EXERCISE_LIBRARY.md §2/§3) -- the keypoint_signature rules above assume the hip/knee landmarks are actually visible, which a real machine setup may not guarantee. Flagged for whoever scopes Stage 5b's camera-framing requirements for this exercise."
+  },
+  "thresholds": {
+    "_status": "SEED values only -- placeholders pending real field-measured tuning per EXERCISE_LIBRARY.md §4. Not authoritative; do not treat as validated.",
+    "hamcurl_hip_lift_y": 0.05,
+    "hamcurl_partial_rom_knee_max": 90
+  },
+  "rep_counting": {
+    "phases": ["top", "descending", "bottom", "ascending"],
+    "rep_complete_transition": "ascending_to_top",
+    "bottom_position_criterion": "knee_fully_flexed_pad_near_glutes",
+    "top_position_criterion": "legs_extended_pad_down",
+    "_note": "\"top\" = legs extended (rest reference, highest knee angle), \"bottom\" = knee flexed toward glutes (peak, lowest knee angle) -- same top=rest/bottom=effort convention as squat.json."
+  },
+  "coaching_cues": {
+    "setup": "Lie face down, pad against your ankles, hips flat",
+    "execution": "Curl the pad up with control, keep hips down",
+    "good_rep": "Full range — hips stayed down",
+    "set_complete_no_flags": "Great set. Hips stayed flat throughout.",
+    "set_complete_with_flags": "Good set. Next time, watch your {flag_body_part} — {flag_cue}.",
+    "flag_cues": {
+      "hip_lift_off_pad": "Press your hips down into the pad",
+      "partial_rom": "Curl all the way toward your glutes"
+    }
+  },
+  "contraindications": {
+    "knee_injury": {
+      "flag": true,
+      "modification": "Reduce weight and range of motion. Stop if you feel knee pain.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "hamstring_injury": {
+      "flag": true,
+      "modification": "Reduce weight and range of motion significantly. Stop if you feel a pull.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "hypertension": {
+      "flag": false,
+      "modification": "Avoid breath-holding. Breathe out as you curl.",
+      "show_on": ["exercise_detail"]
+    }
+  },
+  "model_assist": {
+    "enabled": false,
+    "feature_window_frames": 10,
+    "derived_features": ["left_knee_angle", "right_knee_angle", "hip_lift_y", "symmetry", "tempo_ms"],
+    "notes": "Advisory only. May detect rule-less errors (e.g. asymmetric curl between legs). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "vision_support": false
+}
