@@ -1,0 +1,94 @@
+{
+  "exercise_id": "arnold_press",
+  "schema_version": 2,
+  "name": "Arnold Press",
+  "demo_video_url": "TBD",
+  "tier": "B",
+  "movement_type": "rep",
+  "target_muscles": ["shoulders", "triceps", "upper_chest"],
+  "difficulty": "intermediate",
+  "equipment": ["dumbbell"],
+  "is_premium": false,
+  "estimated_duration_seconds": 90,
+  "reference_keypoints": {
+    "correct": {
+      "description": "Dumbbells start at shoulder height with palms facing the body, rotate and press to full overhead lockout with palms facing forward, without excessive lower-back arch",
+      "key_angles": {
+        "elbow_angle_at_top": { "min": 160, "max": 180 },
+        "elbow_angle_at_bottom": { "min": 70, "max": 100 }
+      }
+    },
+    "common_errors": [
+      {
+        "error_id": "lockout_rom",
+        "description": "Arms do not reach full extension overhead -- incomplete lockout",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "elbow_angle_at_top_of_rep < threshold.arnold_lockout_elbow_angle_min",
+          "threshold_key": "arnold_lockout_elbow_angle_min",
+          "phase_detected_in": ["top"]
+        }
+      },
+      {
+        "error_id": "lumbar_arch",
+        "description": "Lower back arches excessively to help drive the press overhead -- a spinal-safety concern",
+        "severity": "high",
+        "status": "needs_pt_confirmation",
+        "status_note": "Same injury mechanism as overhead_press.json's lumbar_hyperextension fault (Arnold press is an overhead-press variant) -- not explicitly named in this build task's hard-rule list, but sharing the identical uncertain safety geometry, so treated the same way rather than guessing a threshold for one press variant and not its close relative. No threshold value is seeded pending PT confirmation.",
+        "keypoint_signature": {
+          "rule": "PROXY ONLY, not PT-confirmed: angle(shoulder, hip, knee) deviates from a neutral-spine reference by more than threshold.arnold_lumbar_arch_tolerance -- do not implement against this rule without PT sign-off.",
+          "threshold_key": "arnold_lumbar_arch_tolerance",
+          "phase_detected_in": ["ascending", "top"]
+        }
+      }
+    ],
+    "_landmark_limitation_note": "\"rotation path\" (EXERCISE_LIBRARY.md §3's key-faults column, the palms-in-to-palms-forward rotation this exercise is named for) is intentionally NOT a common_error here -- the Stage-0 keypoint schema carries landmark POSITION (x/y/z/visibility) only, not wrist/forearm ORIENTATION, so rotation can't be measured without data the pipeline doesn't capture. This is a sensing-capability gap, not a biomechanics question -- flagged for whoever scopes Stage 5b, not silently dropped."
+  },
+  "thresholds": {
+    "_status": "SEED values only -- placeholders pending real field-measured tuning per EXERCISE_LIBRARY.md §4. Not authoritative; do not treat as validated. arnold_lumbar_arch_tolerance is intentionally null -- see the lumbar_arch fault's status_note.",
+    "arnold_lockout_elbow_angle_min": 165,
+    "arnold_lumbar_arch_tolerance": null
+  },
+  "rep_counting": {
+    "phases": ["top", "descending", "bottom", "ascending"],
+    "rep_complete_transition": "ascending_to_top",
+    "bottom_position_criterion": "racked_at_shoulder_palms_in_elbow_flexed",
+    "top_position_criterion": "arms_fully_extended_overhead_palms_forward",
+    "_note": "\"top\" = full overhead lockout (rest/reference, highest elbow angle), \"bottom\" = racked at the shoulder (peak flexion) -- same top=rest/bottom=effort convention as pushup.json/overhead_press.json."
+  },
+  "coaching_cues": {
+    "setup": "Dumbbells at shoulders, palms facing you, core braced",
+    "execution": "Rotate and press overhead, keep your ribs down",
+    "good_rep": "Smooth rotation — solid lockout",
+    "set_complete_no_flags": "Strong set. Clean lockout every rep.",
+    "set_complete_with_flags": "Good set. Next time, watch your {flag_body_part} — {flag_cue}.",
+    "flag_cues": {
+      "lockout_rom": "Press all the way to full lockout",
+      "lumbar_arch": "Keep your ribs down, brace your core"
+    }
+  },
+  "contraindications": {
+    "shoulder_injury": {
+      "flag": true,
+      "modification": "Reduce range of motion or drop the rotation, pressing straight up instead. Stop if you feel shoulder pain.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "back_injury": {
+      "flag": true,
+      "modification": "Brace your core hard and avoid arching. Consider a seated variation with back support.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "hypertension": {
+      "flag": false,
+      "modification": "Avoid breath-holding (Valsalva). Breathe out as you press up.",
+      "show_on": ["exercise_detail"]
+    }
+  },
+  "model_assist": {
+    "enabled": false,
+    "feature_window_frames": 12,
+    "derived_features": ["left_elbow_angle", "right_elbow_angle", "shoulder_hip_knee_angle", "symmetry", "tempo_ms", "range_of_motion"],
+    "notes": "Advisory only. Cannot override rep count or safety flags -- and per this contract's hard rule, cannot substitute for PT confirmation on the lumbar_arch fault's threshold either. Default off until eval passes."
+  },
+  "vision_support": false
+}

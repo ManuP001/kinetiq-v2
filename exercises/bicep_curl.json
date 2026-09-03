@@ -1,0 +1,103 @@
+{
+  "exercise_id": "bicep_curl",
+  "schema_version": 2,
+  "name": "Bicep Curl",
+  "demo_video_url": "TBD",
+  "tier": "B",
+  "movement_type": "rep",
+  "target_muscles": ["biceps", "forearms"],
+  "difficulty": "beginner",
+  "equipment": ["dumbbell", "barbell"],
+  "is_premium": false,
+  "estimated_duration_seconds": 75,
+  "reference_keypoints": {
+    "correct": {
+      "description": "Arms start extended at the sides, elbows stay pinned to the torso while curling to full flexion, controlled tempo throughout",
+      "key_angles": {
+        "elbow_angle_at_top": { "min": 30, "max": 60 },
+        "elbow_angle_at_bottom": { "min": 160, "max": 180 }
+      }
+    },
+    "common_errors": [
+      {
+        "error_id": "elbow_drift",
+        "description": "Elbows drift forward away from the torso instead of staying pinned",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "abs(elbow.x - hip.x) - abs(elbow.x_at_rep_start - hip.x) > threshold.curl_elbow_drift_x",
+          "threshold_key": "curl_elbow_drift_x",
+          "phase_detected_in": ["ascending", "top"]
+        }
+      },
+      {
+        "error_id": "torso_swing",
+        "description": "Torso rocks or swings to help generate momentum instead of an isolated curl",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "torso_lean_degrees > threshold.curl_torso_swing_max_deg",
+          "threshold_key": "curl_torso_swing_max_deg",
+          "phase_detected_in": ["ascending"]
+        }
+      },
+      {
+        "error_id": "partial_rom",
+        "description": "Curl does not reach full flexion at the top",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "elbow_angle_at_top_of_rep > threshold.curl_partial_rom_elbow_max",
+          "threshold_key": "curl_partial_rom_elbow_max",
+          "phase_detected_in": ["top"]
+        }
+      }
+    ]
+  },
+  "thresholds": {
+    "_status": "SEED values only -- placeholders pending real field-measured tuning per EXERCISE_LIBRARY.md §4. Not authoritative; do not treat as validated.",
+    "curl_elbow_drift_x": 0.06,
+    "curl_torso_swing_max_deg": 15,
+    "curl_partial_rom_elbow_max": 70
+  },
+  "rep_counting": {
+    "phases": ["bottom", "ascending", "top", "descending"],
+    "rep_complete_transition": "descending_to_bottom",
+    "bottom_position_criterion": "arms_extended_dumbbell_down",
+    "top_position_criterion": "elbow_fully_flexed_dumbbell_at_shoulder",
+    "_note": "Field NAMES match every other contract's rep_counting shape (top_position_criterion/bottom_position_criterion), but a curl's rest/reference position is the EXTENDED-arm position, which is the schema's usual \"bottom_position_criterion\" wording -- kept as-is for field-name consistency; the VALUES describe the real curl-specific meaning. phases/rep_complete_transition are written starting from the extended rest position to match."
+  },
+  "coaching_cues": {
+    "setup": "Stand tall, arms extended, elbows at your sides",
+    "execution": "Curl up with control, keep elbows still",
+    "good_rep": "Clean curl — no swing",
+    "set_complete_no_flags": "Great set. Elbows locked in place.",
+    "set_complete_with_flags": "Good set. Next time, watch your {flag_body_part} — {flag_cue}.",
+    "flag_cues": {
+      "elbow_drift": "Keep your elbows pinned to your sides",
+      "torso_swing": "Stand still, no rocking the torso",
+      "partial_rom": "Curl all the way up"
+    }
+  },
+  "contraindications": {
+    "elbow_injury": {
+      "flag": true,
+      "modification": "Reduce weight and range of motion. Stop if you feel elbow pain.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "wrist_injury": {
+      "flag": true,
+      "modification": "Use a neutral-grip (hammer) variation to reduce wrist strain.",
+      "show_on": ["exercise_detail"]
+    },
+    "hypertension": {
+      "flag": false,
+      "modification": "Avoid breath-holding. Breathe out as you curl up.",
+      "show_on": ["exercise_detail"]
+    }
+  },
+  "model_assist": {
+    "enabled": false,
+    "feature_window_frames": 10,
+    "derived_features": ["left_elbow_angle", "right_elbow_angle", "elbow_drift_x", "torso_lean_deg", "symmetry", "tempo_ms"],
+    "notes": "Advisory only. May detect rule-less errors (e.g. wrist curl compensation, asymmetric curling speed). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "vision_support": false
+}
