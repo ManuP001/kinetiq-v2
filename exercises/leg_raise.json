@@ -1,0 +1,92 @@
+{
+  "exercise_id": "leg_raise",
+  "schema_version": 2,
+  "name": "Lying Leg Raise",
+  "demo_video_url": "TBD",
+  "tier": "A",
+  "movement_type": "rep",
+  "target_muscles": ["lower_abs", "hip_flexors", "core"],
+  "difficulty": "beginner",
+  "equipment": ["mat"],
+  "is_premium": false,
+  "estimated_duration_seconds": 90,
+  "reference_keypoints": {
+    "correct": {
+      "description": "Lying on the back, legs raised together with control to roughly vertical, lower back stays flat against the mat",
+      "key_angles": {
+        "hip_angle_at_top": { "min": 60, "max": 100 },
+        "hip_angle_at_bottom": { "min": 160, "max": 180 }
+      }
+    },
+    "common_errors": [
+      {
+        "error_id": "lumbar_arch",
+        "description": "Lower back arches off the mat instead of staying flat",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "angle(shoulder, hip, knee) deviates from threshold.legraise_neutral_hip_angle by more than threshold.legraise_lumbar_arch_tolerance",
+          "threshold_key": "legraise_lumbar_arch_tolerance",
+          "phase_detected_in": ["descending", "bottom", "ascending"]
+        }
+      },
+      {
+        "error_id": "momentum_swing",
+        "description": "Legs swing up using momentum instead of a controlled lift",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "rep_duration_ms < threshold.legraise_min_controlled_tempo_ms",
+          "threshold_key": "legraise_min_controlled_tempo_ms",
+          "phase_detected_in": ["ascending"]
+        }
+      }
+    ]
+  },
+  "thresholds": {
+    "_status": "SEED values only -- placeholders pending real field-measured tuning per EXERCISE_LIBRARY.md §4. Not authoritative; do not treat as validated.",
+    "legraise_neutral_hip_angle": 175,
+    "legraise_lumbar_arch_tolerance": 15,
+    "legraise_min_controlled_tempo_ms": 800
+  },
+  "rep_counting": {
+    "phases": ["top", "descending", "bottom", "ascending"],
+    "rep_complete_transition": "descending_to_top",
+    "bottom_position_criterion": "legs_raised_hip_flexed_near_vertical",
+    "top_position_criterion": "legs_lowered_hip_extended_flat",
+    "_note": "\"top\" = legs down/hip extended (rest reference, highest hip angle), \"bottom\" = legs raised/hip flexed (peak, lowest hip angle) -- same top=rest/bottom=effort convention as squat.json. rep_complete_transition is descending_to_top (not ascending_to_top) because the rep's counted excursion is legs-up-then-down, the mirror of squat's stand-then-descend."
+  },
+  "coaching_cues": {
+    "setup": "Lie flat, hands at your sides or under hips",
+    "execution": "Raise your legs together, keep your back flat",
+    "good_rep": "Great control — back stayed flat",
+    "set_complete_no_flags": "Clean set. Excellent lower-back control.",
+    "set_complete_with_flags": "Good set. Next time, watch your {flag_body_part} — {flag_cue}.",
+    "flag_cues": {
+      "lumbar_arch": "Press your lower back into the mat",
+      "momentum_swing": "Slow down, lift with control"
+    }
+  },
+  "contraindications": {
+    "back_injury": {
+      "flag": true,
+      "modification": "Bend your knees to reduce lever length, or place hands under your hips for support. Stop if you feel lumbar pressure.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "hip_injury": {
+      "flag": true,
+      "modification": "Reduce range of motion. Stop if you feel hip pain.",
+      "show_on": ["exercise_detail"]
+    },
+    "hypertension": {
+      "flag": false,
+      "modification": "Avoid breath-holding. Breathe out as you raise your legs.",
+      "show_on": ["exercise_detail"]
+    }
+  },
+  "model_assist": {
+    "enabled": false,
+    "feature_window_frames": 12,
+    "derived_features": ["hip_angle", "lumbar_arch_deviation", "tempo_ms", "symmetry", "range_of_motion"],
+    "notes": "Advisory only. May detect rule-less errors (e.g. asymmetric leg lift, knee bend compensating for tight hamstrings). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "vision_support": false
+}

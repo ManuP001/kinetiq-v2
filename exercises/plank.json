@@ -1,0 +1,92 @@
+{
+  "exercise_id": "plank",
+  "schema_version": 2,
+  "name": "Plank",
+  "demo_video_url": "TBD",
+  "tier": "A",
+  "movement_type": "hold",
+  "target_muscles": ["core", "shoulders", "glutes"],
+  "difficulty": "beginner",
+  "equipment": [],
+  "is_premium": false,
+  "estimated_duration_seconds": 60,
+  "reference_keypoints": {
+    "correct": {
+      "description": "Body forms a straight line from ankles to shoulders (forearm or high plank), hips level -- neither sagging nor piked",
+      "key_angles": {
+        "body_alignment_angle": { "min": 160, "max": 180 }
+      }
+    },
+    "common_errors": [
+      {
+        "error_id": "hip_sag",
+        "description": "Hips drop below straight-line body position, loading the lower back",
+        "severity": "high",
+        "keypoint_signature": {
+          "rule": "angle(shoulder, hip, ankle) < threshold.plank_hip_sag_angle_min",
+          "threshold_key": "plank_hip_sag_angle_min",
+          "phase_detected_in": ["holding"]
+        }
+      },
+      {
+        "error_id": "hip_pike",
+        "description": "Hips raised too high -- reduces core engagement",
+        "severity": "medium",
+        "keypoint_signature": {
+          "rule": "angle(shoulder, hip, ankle) > threshold.plank_hip_pike_angle_max",
+          "threshold_key": "plank_hip_pike_angle_max",
+          "phase_detected_in": ["holding"]
+        }
+      }
+    ],
+    "_landmark_limitation_note": "\"neck alignment\" (EXERCISE_LIBRARY.md §3's key-faults column) is intentionally NOT a common_error here -- there is no head/neck landmark in detector/keypoint_map.py's POSE_MODEL_LANDMARKS (shoulder/elbow/wrist/hip/knee/ankle/heel/toe only), so it can't be measured without inventing a landmark the pipeline doesn't have. Flagged for whoever scopes Stage 5b, not silently dropped."
+  },
+  "thresholds": {
+    "_status": "SEED values only -- placeholders pending real field-measured tuning per EXERCISE_LIBRARY.md §4. Not authoritative; do not treat as validated.",
+    "plank_hip_sag_angle_min": 160,
+    "plank_hip_pike_angle_max": 200
+  },
+  "rep_counting": {
+    "_note": "movement_type is \"hold\", not \"rep\" -- graded on hold-quality over time, not a rep count (EXERCISE_LIBRARY.md §5). This key is still named rep_counting for schema-shape consistency with every other exercise contract; its content is hold-specific.",
+    "phases": ["not_started", "holding", "broken"],
+    "hold_criterion": "shoulder_hip_ankle_near_collinear_within_tolerance",
+    "min_hold_duration_ms_seed": 20000,
+    "posture_check_interval_ms_seed": 500,
+    "break_criterion": "posture_deviation_exceeds_tolerance_for_break_grace_period"
+  },
+  "coaching_cues": {
+    "setup": "Forearms and toes on the ground, body straight",
+    "execution": "Brace your core, keep hips level and still",
+    "good_rep": "Great line — hold steady",
+    "set_complete_no_flags": "Strong hold. Great alignment throughout.",
+    "set_complete_with_flags": "Good hold. Next time, watch your {flag_body_part} — {flag_cue}.",
+    "flag_cues": {
+      "hip_sag": "Lift your hips, engage your core",
+      "hip_pike": "Lower your hips to a straight line"
+    }
+  },
+  "contraindications": {
+    "back_injury": {
+      "flag": true,
+      "modification": "Reduce hold time. Try a shorter, more frequent hold, or an incline plank against a wall.",
+      "show_on": ["exercise_detail", "live_session_start"]
+    },
+    "shoulder_injury": {
+      "flag": true,
+      "modification": "Use a forearm plank instead of a high plank. Reduce hold time.",
+      "show_on": ["exercise_detail"]
+    },
+    "hypertension": {
+      "flag": false,
+      "modification": "Avoid breath-holding during the hold -- breathe steadily throughout.",
+      "show_on": ["exercise_detail"]
+    }
+  },
+  "model_assist": {
+    "enabled": false,
+    "feature_window_frames": 12,
+    "derived_features": ["body_alignment_angle", "posture_stability_variance", "hold_duration_ms"],
+    "notes": "Advisory only. May detect rule-less errors (e.g. rotation/twist, gradual drift not caught by the instantaneous threshold). Cannot override the deterministic hold-quality gate or safety flags. Default off until eval passes."
+  },
+  "vision_support": false
+}
