@@ -19,8 +19,9 @@ EXERCISE_LIBRARY.md §4.
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 import gate_config
 from scorers.phantom import PHANTOM_CLIP_TYPES
@@ -122,6 +123,20 @@ def aggregate_form_pr(clips: Iterable[Any]) -> dict[str, dict[str, PR]]:
             total.fp += pr.fp
             total.fn += pr.fn
     return result
+
+
+def insufficient_evidence_counts(clips: Iterable[Any]) -> Dict[str, int]:
+    """flag -> count of reps, across every clip, where a sustained flag couldn't be judged
+    either way (too few visibility-passing frames -- SPRINT.md G2, detector/flag_hysteresis.py).
+    Doesn't count as a false accusation or a miss in aggregate_form_pr's P/R -- surfaced
+    separately so it's never silently invisible. Shared by aggregate.py's golden-set report and
+    effectiveness_report.py's single-session report -- one tally, not two copies."""
+    counts: Dict[str, int] = defaultdict(int)
+    for clip in clips:
+        for rep in clip.det_reps:
+            for flag in rep.get("insufficient_evidence", []):
+                counts[flag] += 1
+    return dict(counts)
 
 
 def gate_flag(pr: PR, severity: str) -> FlagGateResult:
