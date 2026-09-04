@@ -165,16 +165,18 @@ own `flags` list already produced (never re-ordered here).
 `config.py`), counted with the same `len(text.split())` `aggregate.py`'s existing Stage-0
 coaching-cue assertion already uses. **An over-cap cue is never silently truncated** — it's a copy
 bug in the exercise library, and cutting words would hide the bug along with the words. Two real
-ones this check found (not hypothetical):
+ones this check found (not hypothetical, though both have since been shortened in the exercise
+library and no longer trip it — `test_cues.py` keeps a synthetic-fixture test for the mechanism
+itself so this coverage doesn't depend on real cue copy staying broken):
 
-- `squat.json`'s `shallow_depth` cue — "Sit a little deeper — hip crease to knee level" (10 words)
-- `pushup.json`'s `shallow_pushup` cue — "Go a little lower — elbows to 90 degrees" (9 words)
+- `squat.json`'s `shallow_depth` cue was "Sit a little deeper — hip crease to knee level" (10 words)
+- `pushup.json`'s `shallow_pushup` cue was "Go a little lower — elbows to 90 degrees" (9 words)
 
-Both still exceed the cap once the em dash is counted as a token by the same convention
-`aggregate.py` already uses — see `test_cues.py`. When the API returns an over-cap cue, the full
-(untruncated) text is still returned in `coaching_cue`, `cue_warning` is set to a message naming
-the flag/word-count, and a server-side warning is logged. `cue_warning` is **not** one of the 7
-fields the build task originally specified — it was added specifically to satisfy "flag, don't
+Both exceeded the cap once the em dash was counted as a token by the same convention
+`aggregate.py` already uses. When the API returns an over-cap cue, the full (untruncated) text is
+still returned in `coaching_cue`, `cue_warning` is set to a message naming the flag/word-count,
+and a server-side warning is logged. `cue_warning` is **not** one of the 7 fields the build task
+originally specified — it was added specifically to satisfy "flag, don't
 silently truncate" without inventing a new top-level error path for what is, functionally, still a
 successful response.
 

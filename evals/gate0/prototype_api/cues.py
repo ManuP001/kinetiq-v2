@@ -14,9 +14,10 @@ EXERCISE_SUSTAINED_FLAG_IDS-then-rep-aggregate, detector/adapter.py's job, not t
 
 Word cap: LIVE_CUE_MAX_WORDS (config.py), counted with the SAME len(text.split()) aggregate.py's
 existing Stage-0 coaching-cue assertion already uses -- one definition of "word count", not two.
-An over-cap cue is FLAGGED (CueResult.over_word_cap), never silently truncated -- squat.json's
-shallow_depth cue ("Sit a little deeper — hip crease to knee level") is over the 8-word cap; that
-is a copy bug for someone to fix in the exercise library, not something to hide by cutting words.
+An over-cap cue is FLAGGED (CueResult.over_word_cap), never silently truncated -- this is what
+caught squat.json's shallow_depth and pushup.json's shallow_pushup cues both being over the
+8-word cap (a copy bug, not something to hide by cutting words); both have since been shortened
+in the exercise library. See prototype_api/README.md's "Coaching cue layer" section.
 """
 from __future__ import annotations
 

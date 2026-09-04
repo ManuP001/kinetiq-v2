@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """Unit tests for prototype_api/cues.py, against the REAL exercise library (not a fixture) --
-this is exactly what proves squat.json's shallow_depth cue is genuinely over the word cap."""
+this is what proves the library's cue text genuinely fits LIVE_CUE_MAX_WORDS (or doesn't).
+
+squat.json's shallow_depth and pushup.json's shallow_pushup cues were originally found over the
+word cap by this exact test file; both have since been shortened in the exercise library (a
+separate, independent fix -- not this task's), so the regression tests below now assert they stay
+under the cap rather than that they're over it. test_over_cap_cue_is_flagged_not_hidden covers the
+over-word-cap MECHANISM itself against a synthetic fixture, so that coverage doesn't depend on the
+real library's copy staying broken."""
 from __future__ import annotations
 
 import sys
@@ -37,13 +44,14 @@ class TestCueForRep(unittest.TestCase):
         self.assertIsNone(result.text)
         self.assertFalse(result.over_word_cap)
 
-    def test_squat_shallow_depth_cue_is_over_the_word_cap(self):
-        # The exact case the build task called out: squat.json's shallow_depth cue is over
-        # LIVE_CUE_MAX_WORDS. Flagged here, not silently truncated.
+    def test_squat_shallow_depth_cue_is_within_the_word_cap(self):
+        # Was over-cap (10 words, "Sit a little deeper -- hip crease to knee level"); the
+        # exercise library has since shortened it. Regression guard, not the over-cap mechanism
+        # test -- see test_over_cap_cue_is_flagged_not_hidden for that, against a synthetic
+        # fixture that doesn't depend on the real library's copy staying broken.
         result = cue_for_rep(SQUAT, ["shallow_depth"])
-        self.assertEqual(result.text, "Sit a little deeper — hip crease to knee level")
-        self.assertTrue(result.over_word_cap)
-        self.assertGreater(result.word_count, gate_config.LIVE_CUE_MAX_WORDS)
+        self.assertIsNotNone(result.text)
+        self.assertFalse(result.over_word_cap, result.text)
 
     def test_pushup_good_rep_and_elbow_flare_and_hip_sag_are_within_the_word_cap(self):
         for flags in ([], ["elbow_flare"], ["hip_sag"]):
@@ -52,13 +60,25 @@ class TestCueForRep(unittest.TestCase):
                 self.assertIsNotNone(result.text)
                 self.assertFalse(result.over_word_cap, result.text)
 
-    def test_pushup_shallow_pushup_cue_is_also_over_the_word_cap(self):
-        # A second real over-cap cue this word-cap check surfaces, not assumed away: "Go a
-        # little lower — elbows to 90 degrees" is 9 words counting the em dash as a token (the
-        # same len(text.split()) convention aggregate.py's Stage-0 assertion already uses).
+    def test_pushup_shallow_pushup_cue_is_within_the_word_cap(self):
+        # Was over-cap (9 words, "Go a little lower -- elbows to 90 degrees"); the exercise
+        # library has since shortened it. Regression guard, same reasoning as the squat test above.
         result = cue_for_rep(PUSHUP, ["shallow_pushup"])
-        self.assertTrue(result.over_word_cap)
         self.assertIsNotNone(result.text)
+        self.assertFalse(result.over_word_cap, result.text)
+
+    def test_over_cap_cue_is_flagged_not_hidden(self):
+        # The over-word-cap MECHANISM itself, against a synthetic fixture -- doesn't depend on
+        # any particular real exercise's cue text staying broken to keep testing this path.
+        synthetic_exercise = {
+            "coaching_cues": {
+                "good_rep": "Nice rep",
+                "flag_cues": {"some_flag": "This cue text is deliberately far too many words long"},
+            }
+        }
+        result = cue_for_rep(synthetic_exercise, ["some_flag"])
+        self.assertTrue(result.over_word_cap)
+        self.assertIsNotNone(result.text)  # still returned, never hidden
 
 
 if __name__ == "__main__":

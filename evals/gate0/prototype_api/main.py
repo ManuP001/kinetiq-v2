@@ -116,6 +116,16 @@ def _cue_warning(current_flags: List[str], cue: CueResult) -> str | None:
     )
 
 
+@app.get("/health")
+def health() -> Dict[str, Any]:
+    """Unauthenticated liveness check (prototype-only, no auth anywhere in this service --
+    nothing sensitive to protect here). Deploy sanity check: after standing this service up
+    behind a tunnel or a hosted web service, `curl <url>/health` (or just open it in a phone
+    browser -- a plain navigation, not a CORS-governed fetch) should return 200 before you ever
+    point the PWA at it. See prototype_api/README.md's deploy section and check_local.sh."""
+    return {"status": "ok", "service": "kinetiq-v3-prototype-detector-api", "supported_exercises": SUPPORTED_EXERCISES}
+
+
 @app.post("/prototype/assess", response_model=AssessResponse)
 def assess(body: AssessRequest) -> AssessResponse:
     if body.exercise_id not in SUPPORTED_EXERCISES:

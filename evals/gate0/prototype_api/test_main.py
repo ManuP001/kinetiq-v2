@@ -30,6 +30,21 @@ class PrototypeApiTestCase(unittest.TestCase):
         self.frames = _load_frames()
 
 
+class TestHealth(PrototypeApiTestCase):
+    def test_health_returns_ok_and_supported_exercises(self):
+        resp = self.client.get("/health")
+        self.assertEqual(resp.status_code, 200)
+        body = resp.json()
+        self.assertEqual(body["status"], "ok")
+        self.assertIn("squat", body["supported_exercises"])
+
+    def test_health_needs_no_request_body(self):
+        # a plain GET, no auth, no CORS preflight needed for a same-origin/curl/manual-navigation
+        # check -- this is the deploy sanity check, see prototype_api/README.md.
+        resp = self.client.get("/health")
+        self.assertEqual(resp.status_code, 200)
+
+
 class TestAssessValidation(PrototypeApiTestCase):
     def test_unknown_exercise_id_is_rejected(self):
         resp = self.client.post("/prototype/assess", json={
@@ -201,11 +216,20 @@ class TestCoachingCue(PrototypeApiTestCase):
         self.assertIsNone(body["cue_warning"])
 
     def test_over_cap_cue_is_flagged_not_hidden(self):
-        import gate_config
+        # A synthetic exercise fixture, not the real library -- the real exercises/*.json cue
+        # text is legitimately mutable (a copy fix can land at any time; as of this test being
+        # written, none of the 14 exercises has an over-cap cue at all, which is the point: this
+        # test verifies the over-word-cap MECHANISM itself, not any particular exercise's
+        # current copy). See prototype_api/test_cues.py for coverage against the real library.
         from prototype_api.cues import cue_for_rep
 
-        squat = gate_config.load_exercise_library()["squat"]
-        result = cue_for_rep(squat, ["shallow_depth"])
+        synthetic_exercise = {
+            "coaching_cues": {
+                "good_rep": "Nice rep",
+                "flag_cues": {"some_flag": "This cue text is deliberately far too many words long"},
+            }
+        }
+        result = cue_for_rep(synthetic_exercise, ["some_flag"])
         self.assertTrue(result.over_word_cap)
         self.assertIsNotNone(result.text)  # still returned, never hidden
 
