@@ -1,0 +1,23 @@
+# Render Docker web-service config for prototype_api -- Path B (durable) hosting.
+# See evals/gate0/prototype_api/README.md's "Deploying for a real gym session" section, and
+# evals/gate0/prototype_api/Dockerfile's header comment for exactly what gets built and why the
+# build context has to be this repo root.
+#
+# Render auto-detects a render.yaml at the repo root when you connect this repo as a "Blueprint".
+# You still choose/confirm PROTOTYPE_API_CORS_ORIGINS's value yourself in Render's dashboard (it's
+# marked sync: false below so Render doesn't ask you to commit a real value here) -- that's the
+# one manual step, since it depends on the PWA's deployed URL, which you'll only know after
+# deploying kinetiq-demo3.
+services:
+  - type: web
+    name: kinetiq-prototype-api
+    runtime: docker
+    dockerfilePath: ./evals/gate0/prototype_api/Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PROTOTYPE_API_CORS_ORIGINS
+        sync: false
+        # Set this in Render's dashboard to the PWA's exact deployed HTTPS origin, e.g.
+        # https://kinetiq-live-prototype.onrender.com -- NOT "*". No trailing slash, no path.

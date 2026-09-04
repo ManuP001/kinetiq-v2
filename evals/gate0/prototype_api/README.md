@@ -38,22 +38,90 @@ keypoints cross this API, so an open origin list doesn't expose anything sensiti
 PROTOTYPE_API_CORS_ORIGINS="https://your-pwa.example.com" python -m prototype_api
 ```
 
-## Reaching this API from a phone
+## Health check
+
+`GET /health` — plain, unauthenticated (nothing to protect in a no-auth prototype), returns
+`{"status": "ok", "supported_exercises": [...]}`. The deploy sanity check: confirm this responds
+(`curl`, or just open the URL in a phone browser — a plain navigation, not a CORS-governed fetch)
+*before* ever pointing the PWA at a deployed instance. `check_local.sh` (below) automates this
+plus a real `/prototype/assess` round-trip.
+
+## Deploying for a real gym session (HTTPS)
+
+`kinetiq v3/DEPLOY_RUNBOOK.md` is the strategic runbook (why HTTPS, the smoke test, session-day
+checklist) — this section is the concrete "how" it links to for the API side. `kinetiq-demo3`'s
+own README has the PWA side.
 
 The PWA needs an HTTPS URL for this API reachable from the phone's network — `localhost` only
-works for a browser running on the same machine as this process. Two options for local device
-testing without a real deployment:
+works for a browser running on the same machine as this process. Two paths; **Path A is
+recommended for the first session**.
 
-- **A tunnel** (`ngrok http 8000`, or similar) — gives you an HTTPS URL forwarding to your
-  local `python -m prototype_api`. Fastest for one-off device testing; the tunnel URL changes
-  every run unless you're on a paid tier with a reserved domain.
-- **A real hosted deployment** (Render/Fly/Railway, etc.) — see `../kinetiq-demo2/README.md`'s
-  "Deploying" section for the no-build static-site pattern this project already uses for the
-  *client*; this API is a Python process, not a static site, so it needs a host that runs one
-  (Render's free "Web Service" tier works for a prototype).
+### Path A — cloudflared quick tunnel (fast, recommended for the first session)
 
-Either way, set the resulting HTTPS URL as `kinetiq-demo3`'s API base URL (see its own README) and
-`PROTOTYPE_API_CORS_ORIGINS` to the PWA's own deployed origin once that's known too.
+```
+cd evals/gate0 && python -m prototype_api      # terminal 1 -- leave running
+cd evals/gate0/prototype_api && ./tunnel.sh    # terminal 2
+```
+
+`tunnel.sh` checks `cloudflared` is installed and that `prototype_api` is already answering
+`/health`, then starts a **cloudflared quick tunnel** and prints an `https://*.trycloudflare.com`
+URL. Preferred over `ngrok`: ngrok's free tier shows an interstitial warning page on first load
+that blocks the PWA's `fetch()` calls outright (a script can't click through it); cloudflared's
+quick tunnel has no such page and needs no signup or account.
+
+Install `cloudflared` first if you don't have it (`brew install cloudflared` / `winget install
+--id Cloudflare.cloudflared` / see [Cloudflare's docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+for other platforms) — **this one install step is yours to run**, nothing here does it for you.
+
+**Trade-off**: the laptop running both commands must stay on and connected for the whole session,
+and the URL is not stable — it changes every time `tunnel.sh` (re)starts.
+
+### Path B — Docker + a hosted web service (more durable)
+
+`Dockerfile` (this directory) builds an image with no pose runtime at all — this service only
+ever runs the geometry detector over already-extracted keypoints, so the image is just
+Python + fastapi/uvicorn/pydantic + the detector/harness code (see the Dockerfile's own header
+comment for the exact confirmed import scan). Build **from the `kinetiq-v2/` repo root**, not
+this directory — the detector's imports resolve paths relative to `evals/gate0/`, `backend/`, and
+`exercises/` all being present at their real relative layout:
+
+```
+cd kinetiq-v2
+docker build -f evals/gate0/prototype_api/Dockerfile -t kinetiq-prototype-api .
+docker run -p 8000:8000 -e PROTOTYPE_API_CORS_ORIGINS="https://your-pwa.example.com" kinetiq-prototype-api
+```
+
+`render.yaml` (repo root) is a ready-to-connect Render Blueprint for this image (Docker-runtime
+web service, `healthCheckPath: /health` wired in) — **connecting the repo to Render and setting
+`PROTOTYPE_API_CORS_ORIGINS` in its dashboard are your steps to run** (they need your Render
+account); nothing here signs you up or provisions anything. Fly/Railway work too via the same
+`Dockerfile` — this repo just doesn't ship a config for those specifically.
+
+### After either path
+
+```
+./check_local.sh https://your-deployed-or-tunneled-url
+```
+
+Confirms `/health` and a real `/prototype/assess` round-trip both work against the URL you're
+about to hand out — catches "wrong port" / "server not actually running" / a typo in seconds,
+before anyone opens the PWA on a phone.
+
+Then, regardless of path:
+1. Set `kinetiq-demo3`'s API base URL to this HTTPS URL (its own README's deploy section).
+2. Set `PROTOTYPE_API_CORS_ORIGINS` to the PWA's **exact** deployed HTTPS origin (scheme + host,
+   no trailing slash, no path) — not `*`, once the PWA's real URL is known. Path A's `tunnel.sh`
+   doesn't need this changed on ITS side (CORS governs the browser's allowed origins to call
+   *this* API, not the reverse); Path B's `render.yaml` already wires the env var in, you just set
+   its value.
+3. Run the phone smoke test in `DEPLOY_RUNBOOK.md` before the real session.
+
+### Tear-down
+
+- **Path A**: `Ctrl+C` the `tunnel.sh` terminal — the tunnel and its URL stop existing immediately.
+- **Path B**: pause or delete the Render service (dashboard) when you're done with this round —
+  redeploying later gives a new instance either way; nothing here persists data server-side to
+  clean up (in-memory session buffer only, gone on process exit regardless).
 
 ## The contract
 

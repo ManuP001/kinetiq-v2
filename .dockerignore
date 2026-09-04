@@ -1,0 +1,15 @@
+# Keeps `docker build` (prototype_api/Dockerfile, built from this repo root) fast -- everything
+# here is excluded from the build context upload even though the Dockerfile only COPYs
+# evals/gate0/, backend/app/core/, and exercises/ anyway. Not a deploy-relevant exclusion list for
+# anything else in this repo.
+.git/
+**/__pycache__/
+**/*.py[cod]
+.venv/
+venv/
+node_modules/
+migrations/
+*.md
+.gitignore
+.env
+.env.*
