@@ -5,6 +5,70 @@ Format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.8.0] — 2026-09-04 — live-prototype run scripts + Render deploy verification
+
+Stands the already-built live prototype up two ways for GATE G-REAL: locally with a real webcam,
+and on Render over public HTTPS. **Run-scripts, deploy configs and docs only** -- no detector,
+behavior, or test change (290 tests pass, same count as 0.7.0). One-detector-two-consumers intact:
+both paths run the same `run_detector`, nothing was reimplemented.
+
+### Added
+
+- `evals/gate0/prototype_api/run_local.ps1` (+ `run_local.sh` twin) -- one command to run the whole
+  prototype locally: starts `prototype_api` on `localhost:8000` and serves the sibling
+  `kinetiq-demo3` repo on `localhost:8080`, sets `PROTOTYPE_API_CORS_ORIGINS` to the PWA's local
+  origin, waits for `/health`, prints the URL, and stops both on Ctrl+C. Allows **both**
+  `localhost` and `127.0.0.1` forms of the origin, since those are different origins to the browser
+  and picking the "wrong" one is an otherwise-baffling CORS failure. `http://localhost` is a secure
+  context, so the camera works and there's no mixed content -- no HTTPS or cloud account needed.
+- `evals/gate0/prototype_api/README.md`: a "Running the whole prototype locally (real webcam)"
+  section -- click-by-click session steps and the exact `effectiveness_report.py` command to score
+  the exported bundle. Its deploy section now leads with **Path R (Render)** as the global path,
+  keeping the cloudflared tunnel as the same-network quick option.
+
+### Verified
+
+- **The Dockerfile's COPY set is complete** -- checked by staging its exact `COPY` lines into a
+  clean tree (nothing else present) and running the literal container `CMD` against it:
+  every module `run_detector` transitively imports resolves; `gate_config.py`'s
+  `parents[2]/"backend"` and `config.py`'s `parents[3]/"exercises"` both land correctly at the
+  container layout (all 14 exercise contracts load, and `EXERCISE_LIBRARY_DIR` demonstrably pointed
+  into the *staged* tree, not the real repo); `check_local.sh` passes against it. Two negative
+  controls confirm the test isn't vacuous -- removing `backend/app/core/` breaks the import, and
+  removing `exercises/` produces the `/health`-lies behaviour described below.
+- `uvicorn`'s console script puts the CWD on `sys.path` (`--app-dir` defaults to `""`, and `run()`
+  does `sys.path.insert(0, app_dir)`), so the `CMD`'s bare `prototype_api.main:app` resolves under
+  `WORKDIR /app/evals/gate0`. Confirmed against the **installed uvicorn 0.35.0** -- the exact
+  version `requirements.txt` pins -- not from memory. This matters because the container uses the
+  `uvicorn` console script while local dev uses `python -m prototype_api`; different sys.path paths.
+- The local run end-to-end through a real browser (Playwright, fake camera + stubbed MediaPipe):
+  PWA served from `localhost:8080` -> **browser-enforced** CORS -> 9/9 successful
+  `POST /prototype/assess`, zero page errors. curl cannot prove this; curl isn't subject to CORS.
+
+### NOT verified (stated rather than assumed)
+
+- **An actual `docker build` was never run.** Docker Desktop isn't installed on this dev machine and
+  installing it needs admin/UAC + WSL2 + likely a reboot -- not completable unattended. The base
+  image and `pip install` layer are therefore unproven; everything the Dockerfile's own
+  `COPY`/`WORKDIR`/`CMD` lines control is proven by the staging test above. The exact command to
+  prove the rest locally is in `prototype_api/README.md`.
+
+### Surfaced, not fixed (out of scope -- would be a detector-side behavior change)
+
+- **`/health` can report a broken image as healthy.** `load_exercise_library()` globs
+  `EXERCISE_LIBRARY_DIR` and returns `{}` for a missing directory instead of failing loudly. So an
+  image built without `exercises/` still boots and answers `GET /health` **200 OK**, while every
+  `POST /prototype/assess` returns **500** -- and Render's `healthCheckPath: /health` would call
+  that service healthy. Mitigated in the docs by making `check_local.sh` (whose second step is a
+  real assess round-trip) the mandatory post-deploy check, not a browser hit on `/health`. Worth
+  revisiting against `CLAUDE.md`'s "fail loudly" standard when detector-side changes are in scope.
+
+### Not changed
+
+- `Dockerfile`, `.dockerignore`, root `render.yaml` -- reviewed and verified as above; correct
+  as-committed, no edit needed.
+- `detector/`, `prototype_api/` request handling, `exercises/*.json`, and every test -- untouched.
+
 ## [0.7.0] — 2026-09-03 — v3 Stage 5a: 11 new exercise contracts (preponed, still gated)
 
 Kinetiq v3 Stage 5a, run in parallel with GATE G-REAL per the task brief: authors the exercise

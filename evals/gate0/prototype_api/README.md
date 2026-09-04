@@ -25,6 +25,66 @@ python -m prototype_api
 Starts uvicorn on `http://127.0.0.1:8000` (single worker, no reload, no TLS — development only).
 Interactive docs at `http://127.0.0.1:8000/docs`.
 
+That runs the API alone. To run the **whole prototype** (API + PWA + your own webcam), see the next
+section.
+
+## Running the whole prototype locally (real webcam)
+
+The fastest confidence check before any cloud deploy: your real camera, your real reps, on this
+machine, no HTTPS and no cloud account needed.
+
+```powershell
+cd evals\gate0\prototype_api
+.\run_local.ps1                      # bash twin: ./run_local.sh
+```
+
+It starts **both** processes and leaves them running until Ctrl+C:
+`prototype_api` on `http://localhost:8000`, and the `kinetiq-demo3` PWA on `http://localhost:8080`
+(served from the sibling repo — pass `-Demo3Path` if yours isn't next to `kinetiq-v2`). It sets
+`PROTOTYPE_API_CORS_ORIGINS` to the PWA's local origin, waits for `/health`, and prints the URL.
+
+**Why no HTTPS is needed here:** `http://localhost` is a **secure context** by browser spec, so
+`getUserMedia` (the camera) works; and an HTTP page calling an HTTP API is same-scheme, so there's
+no mixed-content block either. Both of those stop being true the moment you want this on a *phone*
+— a different device reaches this machine by LAN IP or a public URL, neither of which is a secure
+context over plain HTTP. That's the whole reason the cloud path exists.
+
+Needs internet on first run: the PWA fetches the MediaPipe pose model from a CDN.
+
+### Click-by-click (your part — the webcam session)
+
+1. Open **`http://localhost:8080`**.
+2. First time only: paste **`http://localhost:8000`** into the home screen's **API URL** field →
+   **Save API URL**. (Stored in that browser's `localStorage`. It takes priority over `config.js`,
+   so setting it here does **not** disturb the deployed Render URL baked into `config.js`.)
+3. Pick **Squat**.
+4. **Start** → allow camera when the browser asks.
+5. Do **~5 squats**, in frame, side or diagonal to the camera. Watch the rep count and cue update.
+6. **Stop** → **Validate**: enter the number of reps you *actually* did (this is the ground truth
+   the accuracy number is computed against) plus view/lighting/fitness metadata.
+7. **Summary** → **Export bundle** → saves a `.zip`.
+
+### Score that export
+
+Unzip the bundle, then — because faults are a human judgment call this tool never fabricates — open
+`reps_template.csv` and fill the `faults` column per rep (semicolon-separated `error_id`s from
+`exercises/squat.json`; blank = clean rep), and set `pt_verified` to `true` in `clips_template.csv`.
+Then:
+
+```
+cd evals/gate0
+python effectiveness_report.py --bundle-dir <unzipped-bundle-dir> --golden golden/
+```
+
+Prints rep-accuracy, severity-gated form precision/recall, and a parity check (does the live app's
+`detected.json` match a fresh offline `run_detector` recompute over the exported `keypoints.jsonl`?
+It should be identical — same deterministic algorithm, same frames — so a mismatch means a
+client/API batch desync, not a scoring disagreement).
+
+For a quick look before a trainer has labeled anything, `--allow-unverified` skips the sign-off gate
+— but its precision/recall numbers are a preview, never a real result. Rep-accuracy is meaningful
+either way, since that only needs the count you typed in step 6.
+
 ## CORS (needed for kinetiq-demo3, or any other browser client)
 
 The PWA client is served from a different origin than wherever this process runs, so the browser
@@ -52,11 +112,78 @@ plus a real `/prototype/assess` round-trip.
 checklist) — this section is the concrete "how" it links to for the API side. `kinetiq-demo3`'s
 own README has the PWA side.
 
-The PWA needs an HTTPS URL for this API reachable from the phone's network — `localhost` only
-works for a browser running on the same machine as this process. Two paths; **Path A is
-recommended for the first session**.
+The PWA needs an HTTPS URL for this API reachable from the tester's network — `localhost` only
+works for a browser running on the same machine as this process. Two paths:
 
-### Path A — cloudflared quick tunnel (fast, recommended for the first session)
+- **Path R — Render (recommended for anything global).** A real hosted HTTPS service. Testers
+  anywhere can reach it; no laptop involved. This is the primary path — start here.
+- **Path A — cloudflared quick tunnel (same-network / one-off).** Fastest to stand up, but it
+  points at *your laptop*, which has to stay awake and online for the whole session, and the URL
+  changes every restart.
+
+### Path R — Render Docker web service (recommended, global)
+
+`render.yaml` at the **repo root** is a ready-to-connect Render Blueprint for this service:
+`runtime: docker`, `dockerfilePath: ./evals/gate0/prototype_api/Dockerfile`, `dockerContext: .`,
+`healthCheckPath: /health`, and `PROTOTYPE_API_CORS_ORIGINS` declared with `sync: false` (so no
+real value is committed — you set it in the dashboard once the PWA's URL exists).
+
+**Connecting the repo to Render, and setting that env var, are your steps** — they need your Render
+account; nothing here signs you up or provisions anything. The exact dashboard sequence, and the
+chicken-and-egg wiring order between the two services, are in
+`kinetiq v3/DEPLOY_RUNBOOK.md` §"Deploying to Render (the global path)".
+
+**Free-tier spin-down** — the free plan idles a web service after ~15 minutes of no traffic; the
+next request pays a **30–60s cold start**. That is on top of this service's own recompute cost, and
+it lands on the *first* request of a session, exactly when a tester is watching. Mitigations are in
+the runbook.
+
+#### What is and isn't verified about the image
+
+The `Dockerfile` was verified by **staging its exact `COPY` set into a clean tree** (nothing else
+present) and running the literal container `CMD` against it. That proved:
+
+- every module `run_detector` transitively imports resolves from the copied paths alone —
+  `detector/`, `gate_config.py`, `golden_loader.py`, `exercise_lib.py`, `prototype_api/`, plus
+  `backend/app/core/config.py` (reached via `gate_config.py`'s `sys.path` insert, as a PEP-420
+  namespace package — there are no `__init__.py` files under `backend/app/`, and none are needed);
+- the two pieces of **relative-path arithmetic** land correctly at the container's layout:
+  `gate_config.py`'s `parents[2]/"backend"` → `/app/backend`, and `config.py`'s
+  `parents[3]/"exercises"` → `/app/exercises`, from which all **14** exercise contracts load;
+- `uvicorn`'s console script puts the CWD on `sys.path` (its `--app-dir` defaults to `""`, and
+  `run()` does `sys.path.insert(0, app_dir)`) — so the `CMD`'s bare `prototype_api.main:app`
+  resolves given the final `WORKDIR /app/evals/gate0`. Checked against the **installed uvicorn
+  0.35.0**, the exact version `requirements.txt` pins, not from memory;
+- `check_local.sh` passes against a server started that way.
+
+Two **negative controls** confirmed the check isn't vacuous: with `backend/app/core/` removed the
+app fails to import at all, and with `exercises/` removed it — see the warning below.
+
+> ⚠️ **`/health` alone cannot prove the image is built correctly.** With `exercises/` missing,
+> `load_exercise_library()` globs a non-existent directory, silently returns `{}`, and the service
+> still boots and answers `GET /health` with **200 OK** — while every real `POST /prototype/assess`
+> returns **500**. Render's health check would report that service *healthy*. So after deploying,
+> always run `check_local.sh <url>` (below): its step 2 does a real assess round-trip and catches
+> exactly this. (Noted, not fixed — changing `load_exercise_library()`'s behaviour is a detector-side
+> change and out of scope here.)
+
+**Not verified: an actual `docker build`.** Docker Desktop is not installed on this dev machine, and
+installing it needs admin/UAC + WSL2 + likely a reboot — not something completable unattended. So
+the base image and the `pip install` layer are unproven here; everything the `Dockerfile`'s own
+`COPY`/`WORKDIR`/`CMD` lines control is proven by the staging test above. To prove the rest locally
+before trusting Render:
+
+```
+cd kinetiq-v2
+docker build -f evals/gate0/prototype_api/Dockerfile -t kinetiq-prototype-api .
+docker run -p 8000:8000 -e PROTOTYPE_API_CORS_ORIGINS="http://localhost:8080" kinetiq-prototype-api
+evals/gate0/prototype_api/check_local.sh http://127.0.0.1:8000
+```
+
+Otherwise Render's own build is the first real build — a failure there shows up in its build log,
+and the `/health` check gates the rollout.
+
+### Path A — cloudflared quick tunnel (same-network / one-off)
 
 ```
 cd evals/gate0 && python -m prototype_api      # terminal 1 -- leave running
@@ -74,28 +201,13 @@ Install `cloudflared` first if you don't have it (`brew install cloudflared` / `
 for other platforms) — **this one install step is yours to run**, nothing here does it for you.
 
 **Trade-off**: the laptop running both commands must stay on and connected for the whole session,
-and the URL is not stable — it changes every time `tunnel.sh` (re)starts.
+and the URL is not stable — it changes every time `tunnel.sh` (re)starts. Fine for a same-network
+test you're supervising; not for handing a URL to testers elsewhere. For that, use Path R.
 
-### Path B — Docker + a hosted web service (more durable)
-
-`Dockerfile` (this directory) builds an image with no pose runtime at all — this service only
-ever runs the geometry detector over already-extracted keypoints, so the image is just
-Python + fastapi/uvicorn/pydantic + the detector/harness code (see the Dockerfile's own header
-comment for the exact confirmed import scan). Build **from the `kinetiq-v2/` repo root**, not
-this directory — the detector's imports resolve paths relative to `evals/gate0/`, `backend/`, and
-`exercises/` all being present at their real relative layout:
-
-```
-cd kinetiq-v2
-docker build -f evals/gate0/prototype_api/Dockerfile -t kinetiq-prototype-api .
-docker run -p 8000:8000 -e PROTOTYPE_API_CORS_ORIGINS="https://your-pwa.example.com" kinetiq-prototype-api
-```
-
-`render.yaml` (repo root) is a ready-to-connect Render Blueprint for this image (Docker-runtime
-web service, `healthCheckPath: /health` wired in) — **connecting the repo to Render and setting
-`PROTOTYPE_API_CORS_ORIGINS` in its dashboard are your steps to run** (they need your Render
-account); nothing here signs you up or provisions anything. Fly/Railway work too via the same
-`Dockerfile` — this repo just doesn't ship a config for those specifically.
+The image behind Path R has no pose runtime at all — this service only ever runs the geometry
+detector over already-extracted keypoints, so it's just Python + fastapi/uvicorn/pydantic + the
+detector/harness code. Fly/Railway work off the same `Dockerfile`; this repo just doesn't ship a
+config for those specifically.
 
 ### After either path
 
@@ -108,20 +220,26 @@ about to hand out — catches "wrong port" / "server not actually running" / a t
 before anyone opens the PWA on a phone.
 
 Then, regardless of path:
-1. Set `kinetiq-demo3`'s API base URL to this HTTPS URL (its own README's deploy section).
+1. Set `kinetiq-demo3`'s API base URL to this HTTPS URL — `.\set-api-url.ps1 <url>` in that repo,
+   or its README's deploy section.
 2. Set `PROTOTYPE_API_CORS_ORIGINS` to the PWA's **exact** deployed HTTPS origin (scheme + host,
    no trailing slash, no path) — not `*`, once the PWA's real URL is known. Path A's `tunnel.sh`
-   doesn't need this changed on ITS side (CORS governs the browser's allowed origins to call
-   *this* API, not the reverse); Path B's `render.yaml` already wires the env var in, you just set
-   its value.
+   doesn't need this changed on ITS side (CORS governs which browser origins may call *this* API,
+   not the reverse); Path R's `render.yaml` already declares the env var, you just set its value in
+   the dashboard and restart.
 3. Run the phone smoke test in `DEPLOY_RUNBOOK.md` before the real session.
+
+The full ordered sequence across both services is in `kinetiq v3/DEPLOY_RUNBOOK.md` — it's
+genuinely chicken-and-egg (each side needs the other's URL), so follow it in order rather than
+improvising.
 
 ### Tear-down
 
 - **Path A**: `Ctrl+C` the `tunnel.sh` terminal — the tunnel and its URL stop existing immediately.
-- **Path B**: pause or delete the Render service (dashboard) when you're done with this round —
-  redeploying later gives a new instance either way; nothing here persists data server-side to
-  clean up (in-memory session buffer only, gone on process exit regardless).
+- **Path R**: **suspend** the Render web service in the dashboard when the test round is done — the
+  URL is public and unauthenticated while it's up. Nothing persists server-side to clean up (an
+  in-memory session buffer only, gone on process exit regardless); suspending is about closing the
+  open door, not about data. Resume or redeploy for the next round.
 
 ## The contract
 
