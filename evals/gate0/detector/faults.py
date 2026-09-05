@@ -9,14 +9,22 @@ semantics, no threshold tuning. Thresholds are read from the exercise's own thre
 never restated here (CLAUDE.md §3).
 
 Scope, deliberately not exhaustive:
-  - squat: knee_cave_left, knee_cave_right, shallow_depth -- all three have a complete,
-    unambiguous rule + threshold in squat.json.
+  - squat: knee_cave_left, knee_cave_right, shallow_depth, excess_torso_lean -- all four have a
+    complete, unambiguous rule + threshold in squat.json.
   - pushup: elbow_flare, hip_sag, shallow_pushup -- same.
-  - lunge: shallow_lunge only. lunge.json's front_knee_cave / front_knee_overextend are marked
-    status: "unresolved_spec_conflict" in the library itself (conflicting with Vision_Contract,
-    "not implemented in kinetiq-demo2 pending trainer/PT-confirmed semantics") -- this reference
-    detector leaves them unimplemented for the same reason the existing product does, rather than
-    inventing a resolution to a conflict this task didn't ask it to resolve.
+  - lunge: shallow_lunge and excess_torso_lean. lunge.json's front_knee_cave /
+    front_knee_overextend are marked status: "unresolved_spec_conflict" in the library itself
+    (conflicting with Vision_Contract, "not implemented in kinetiq-demo2 pending trainer/PT-
+    confirmed semantics") -- this reference detector leaves them unimplemented for the same reason
+    the existing product does, rather than inventing a resolution to a conflict this task didn't
+    ask it to resolve.
+
+excess_torso_lean was added later than the rest (2026-09-05) to close a real spec/code gap found by
+the CODE_SPEC_MAP.md audit: EXERCISE_LIBRARY.md §3 lists torso lean among both squat's and lunge's
+key faults, GOLDEN_SET_PROTOCOL.md §7 tells the PT to label it, and RECORDING_SHOTLIST.md items 15
+and 18 deliberately SEED it on lunge clips -- but no common_errors entry existed, so the detector
+could never flag it and every seeded instance would have scored as a miss. The rule and both
+thresholds were transliterated from kinetiq-demo2's shipped implementation, not invented.
 
 Two kinds of function here:
 
@@ -43,7 +51,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from detector.geometry import angle_deg
+from detector.geometry import angle_deg, midpoint, torso_lean_deg
 from detector.keypoint_map import get_point
 
 
@@ -166,6 +174,38 @@ def hip_sag_present(
         if body_angle < threshold:
             return True
     return False if any_evaluable else None
+
+
+def excess_torso_lean_present(
+    person: Dict[str, Any],
+    pose_model: str,
+    thresholds: Dict[str, Any],
+    min_visibility: Optional[float] = None,
+) -> Optional[bool]:
+    """squat.json / lunge.json: torso deviation from vertical > torso_lean_max_deg.
+
+    Unlike elbow_flare / hip_sag, this is NOT an either-side rule: torso lean is a midline
+    measurement (shoulder midpoint vs hip midpoint), so one side's landmarks are not a valid
+    substitute for both -- a single visible shoulder tells you nothing about where the torso's
+    centre line is. All four landmarks are therefore required, and anything less returns None
+    (insufficient evidence), which flag_hysteresis.py surfaces rather than guessing from.
+
+    Threshold comes from each exercise's own thresholds block (squat 45deg, lunge 20deg -- both
+    already present in the library and both matching kinetiq-demo2's shipped values); the geometry
+    is geometry.torso_lean_deg, transliterated from demo2's own implementation.
+    """
+    threshold = thresholds.get("torso_lean_max_deg")
+    if threshold is None:
+        return None
+    left_shoulder = _visible_point(person, pose_model, "left_shoulder", min_visibility)
+    right_shoulder = _visible_point(person, pose_model, "right_shoulder", min_visibility)
+    left_hip = _visible_point(person, pose_model, "left_hip", min_visibility)
+    right_hip = _visible_point(person, pose_model, "right_hip", min_visibility)
+    if not all((left_shoulder, right_shoulder, left_hip, right_hip)):
+        return None
+    shoulder_mid = midpoint((left_shoulder[0], left_shoulder[1]), (right_shoulder[0], right_shoulder[1]))
+    hip_mid = midpoint((left_hip[0], left_hip[1]), (right_hip[0], right_hip[1]))
+    return torso_lean_deg(shoulder_mid, hip_mid) > threshold
 
 
 def shallow_pushup_present(rep_min_angle: float, exercise_json: Dict[str, Any]) -> bool:

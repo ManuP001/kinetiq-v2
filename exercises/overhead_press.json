@@ -22,7 +22,7 @@
       {
         "error_id": "lockout_rom",
         "description": "Arms do not reach full extension overhead -- incomplete lockout",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "elbow_angle_at_top_of_rep < threshold.ohp_lockout_elbow_angle_min",
           "threshold_key": "ohp_lockout_elbow_angle_min",
@@ -32,7 +32,7 @@
       {
         "error_id": "uneven_press",
         "description": "One arm presses higher or faster than the other",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "abs(left_wrist.y - right_wrist.y) > threshold.ohp_uneven_press_wrist_y",
           "threshold_key": "ohp_uneven_press_wrist_y",
@@ -100,6 +100,12 @@
     "feature_window_frames": 12,
     "derived_features": ["left_elbow_angle", "right_elbow_angle", "shoulder_hip_knee_angle", "symmetry", "tempo_ms", "range_of_motion"],
     "notes": "Advisory only (ADR-100/102). Cannot override rep count or safety flags -- and per this contract's hard rule, cannot substitute for PT confirmation on the lumbar_hyperextension fault's threshold either. Default off until expert-agreement eval passes."
+  },
+  "camera_guidance": {
+    "recommended_views": ["side", "diagonal"],
+    "camera_height": "hip",
+    "distance_m": 2.5,
+    "framing_note": "Phone ~2.5m back at hip height. Leave headroom -- lockout goes above the head and must stay in frame."
   },
   "vision_support": false
 }

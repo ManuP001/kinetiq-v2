@@ -22,7 +22,7 @@
       {
         "error_id": "lumbar_arch",
         "description": "Lower back arches off the mat instead of staying flat",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "angle(shoulder, hip, knee) deviates from threshold.legraise_neutral_hip_angle by more than threshold.legraise_lumbar_arch_tolerance",
           "threshold_key": "legraise_lumbar_arch_tolerance",
@@ -32,7 +32,7 @@
       {
         "error_id": "momentum_swing",
         "description": "Legs swing up using momentum instead of a controlled lift",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "rep_duration_ms < threshold.legraise_min_controlled_tempo_ms",
           "threshold_key": "legraise_min_controlled_tempo_ms",
@@ -87,6 +87,12 @@
     "feature_window_frames": 12,
     "derived_features": ["hip_angle", "lumbar_arch_deviation", "tempo_ms", "symmetry", "range_of_motion"],
     "notes": "Advisory only. May detect rule-less errors (e.g. asymmetric leg lift, knee bend compensating for tight hamstrings). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "camera_guidance": {
+    "recommended_views": ["side"],
+    "camera_height": "floor",
+    "distance_m": 1.5,
+    "framing_note": "Phone on the floor, side profile, hips and both legs in frame through the full range."
   },
   "vision_support": false
 }

@@ -23,7 +23,7 @@
       {
         "error_id": "bar_path_drift",
         "description": "Bar drifts away from the body instead of tracking close to the shins/thighs",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "abs(wrist.x - hip.x) - abs(wrist.x_at_rep_start - hip.x_at_rep_start) > threshold.deadlift_bar_path_drift_x",
           "threshold_key": "deadlift_bar_path_drift_x",
@@ -33,7 +33,7 @@
       {
         "error_id": "lockout_rom",
         "description": "Hips do not reach full extension at the top -- incomplete lockout",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "hip_angle_at_top_of_rep < threshold.deadlift_lockout_hip_angle_min",
           "threshold_key": "deadlift_lockout_hip_angle_min",
@@ -101,6 +101,12 @@
     "feature_window_frames": 12,
     "derived_features": ["hip_angle", "knee_angle", "wrist_hip_distance_x", "shoulder_hip_knee_angle", "tempo_ms"],
     "notes": "Advisory only (ADR-100/102). Cannot override rep count or safety flags -- and per this contract's hard rule, cannot substitute for PT confirmation on the lumbar_flexion fault's threshold either. Default off until expert-agreement eval passes; this exercise additionally requires PT sign-off before any form flag ships at all (EXERCISE_LIBRARY.md §5 gate 5)."
+  },
+  "camera_guidance": {
+    "recommended_views": ["side"],
+    "camera_height": "knee_to_hip",
+    "distance_m": 2.5,
+    "framing_note": "Phone ~2.5m away, side profile at knee-to-hip height -- the view that shows spinal position and bar path. Safety-critical: framing must show the whole back."
   },
   "vision_support": false
 }

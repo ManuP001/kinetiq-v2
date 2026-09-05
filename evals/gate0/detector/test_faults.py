@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import gate_config  # noqa: E402
 from detector.faults import (  # noqa: E402
     elbow_flare_present,
+    excess_torso_lean_present,
     hip_sag_present,
     knee_cave_left_present,
     knee_cave_right_present,
@@ -170,6 +171,70 @@ class TestLungePredicates(unittest.TestCase):
         # module doesn't expose anything claiming to detect them.
         import detector.faults as faults_mod
         self.assertFalse(hasattr(faults_mod, "front_knee_cave_present"))
+
+
+class TestExcessTorsoLean(unittest.TestCase):
+    """excess_torso_lean closes the gap CODE_SPEC_MAP.md found: EXERCISE_LIBRARY.md §3 lists torso
+    lean for squat AND lunge, GOLDEN_SET_PROTOCOL.md §7 tells the PT to label it, and
+    RECORDING_SHOTLIST.md seeds it on lunge clips -- but nothing detected it. Thresholds differ per
+    exercise (squat 45deg, lunge 20deg), which is exactly why they're read from the library."""
+
+    def setUp(self):
+        lib = gate_config.load_exercise_library()
+        self.squat = lib["squat"]["thresholds"]
+        self.lunge = lib["lunge"]["thresholds"]
+
+    @staticmethod
+    def _torso(lean_x_offset: float, vis: float = 0.9):
+        """Shoulders offset horizontally from the hips by lean_x_offset; vertical gap fixed at
+        0.30, so lean angle = atan(offset / 0.30)."""
+        return make_person({
+            "left_shoulder": (0.45 + lean_x_offset, 0.40, vis),
+            "right_shoulder": (0.55 + lean_x_offset, 0.40, vis),
+            "left_hip": (0.45, 0.70, vis),
+            "right_hip": (0.55, 0.70, vis),
+        })
+
+    def test_upright_torso_is_not_flagged(self):
+        self.assertFalse(excess_torso_lean_present(self._torso(0.0), MOVENET, self.squat))
+
+    def test_squat_beyond_45_degrees_is_flagged(self):
+        # offset 0.40 over a 0.30 vertical gap -> atan(0.40/0.30) ~= 53deg > squat's 45.
+        self.assertTrue(excess_torso_lean_present(self._torso(0.40), MOVENET, self.squat))
+
+    def test_squat_moderate_lean_is_within_its_own_threshold(self):
+        # atan(0.20/0.30) ~= 34deg: under squat's 45 ...
+        self.assertFalse(excess_torso_lean_present(self._torso(0.20), MOVENET, self.squat))
+
+    def test_same_lean_trips_lunge_because_its_threshold_is_stricter(self):
+        # ... but over lunge's 20. Same geometry, different verdict -- proves the threshold is
+        # read per-exercise from the library rather than baked into the predicate.
+        self.assertTrue(excess_torso_lean_present(self._torso(0.20), MOVENET, self.lunge))
+
+    def test_lean_direction_does_not_matter(self):
+        # Absolute deviation: a backward lean of equal magnitude reads the same as a forward one.
+        self.assertTrue(excess_torso_lean_present(self._torso(-0.40), MOVENET, self.squat))
+
+    def test_partial_landmarks_give_insufficient_evidence_not_false(self):
+        # Three of the four present: a midline measurement can't be made from one side, and
+        # guessing would be worse than saying so. Missing landmarks are modelled the way the rest
+        # of this suite (and get_point) models them -- a kp array too short to hold the index --
+        # not a malformed [None, None, ...] row, which validate_frame_schema would reject anyway.
+        person = self._torso(0.40)
+        person["kp"] = person["kp"][: POSE_MODEL_LANDMARKS[MOVENET]["right_hip"]]  # drops right_hip
+        self.assertIsNone(excess_torso_lean_present(person, MOVENET, self.squat))
+
+    def test_no_landmarks_at_all_give_insufficient_evidence(self):
+        empty_person = {"track_id": 0, "kp": [], "box": [0, 0, 1, 1]}
+        self.assertIsNone(excess_torso_lean_present(empty_person, MOVENET, self.squat))
+
+    def test_low_visibility_landmarks_give_insufficient_evidence(self):
+        low = self._torso(0.40, vis=0.10)
+        self.assertIsNone(excess_torso_lean_present(low, MOVENET, self.squat, min_visibility=0.5))
+
+    def test_missing_threshold_gives_insufficient_evidence(self):
+        # pushup has no torso_lean_max_deg -- the predicate must decline, not default to a number.
+        self.assertIsNone(excess_torso_lean_present(self._torso(0.40), MOVENET, {}))
 
 
 if __name__ == "__main__":

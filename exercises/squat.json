@@ -43,10 +43,21 @@
       {
         "error_id": "shallow_depth",
         "description": "Hip crease does not reach knee level at bottom position",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "left_hip.y < left_knee.y AND right_hip.y < right_knee.y at bottom",
           "phase_detected_in": ["bottom"]
+        }
+      },
+      {
+        "error_id": "excess_torso_lean",
+        "description": "Torso leans too far from vertical, shifting load off the legs onto the lower back",
+        "severity": "med",
+        "severity_note": "Set to medium to match this exercise's other form-quality faults and kinetiq-demo2's coaching-tone treatment of it. Excessive lean is lumbar-loading, so a PT may argue for high (which would make it vetoing and raise its precision floor) -- confirm at the GATE G-REAL labelling session.",
+        "keypoint_signature": {
+          "rule": "abs(angle_from_vertical(hip_midpoint -> shoulder_midpoint)) > threshold.torso_lean_max_deg",
+          "threshold_key": "torso_lean_max_deg",
+          "phase_detected_in": ["descending", "bottom", "ascending"]
         }
       }
     ]
@@ -71,6 +82,7 @@
     "flag_cues": {
       "knee_cave_left": "Push your left knee out",
       "knee_cave_right": "Push your right knee out",
+      "excess_torso_lean": "Keep your chest up",
       "shallow_depth": "Sit a little deeper — hip crease to knee level"
     }
   },
@@ -96,6 +108,12 @@
     "feature_window_frames": 12,
     "derived_features": ["left_knee_angle", "right_knee_angle", "torso_lean_deg", "symmetry", "tempo_ms", "range_of_motion"],
     "notes": "Advisory only (ADR-100/102). May refine form score and detect rule-less errors (e.g. butt wink, asymmetric loading). Cannot override rep count or safety flags. Default off until expert-agreement eval passes."
+  },
+  "camera_guidance": {
+    "recommended_views": ["diagonal", "front"],
+    "camera_height": "hip",
+    "distance_m": 2.0,
+    "framing_note": "Phone ~2m away at hip height, facing you at roughly 45 degrees. Whole body visible. Side view works for depth and torso lean, but knee cave needs a front or diagonal view."
   },
   "vision_support": false
 }

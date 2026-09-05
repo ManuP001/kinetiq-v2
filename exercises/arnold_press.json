@@ -22,7 +22,7 @@
       {
         "error_id": "lockout_rom",
         "description": "Arms do not reach full extension overhead -- incomplete lockout",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "elbow_angle_at_top_of_rep < threshold.arnold_lockout_elbow_angle_min",
           "threshold_key": "arnold_lockout_elbow_angle_min",
@@ -89,6 +89,12 @@
     "feature_window_frames": 12,
     "derived_features": ["left_elbow_angle", "right_elbow_angle", "shoulder_hip_knee_angle", "symmetry", "tempo_ms", "range_of_motion"],
     "notes": "Advisory only. Cannot override rep count or safety flags -- and per this contract's hard rule, cannot substitute for PT confirmation on the lumbar_arch fault's threshold either. Default off until eval passes."
+  },
+  "camera_guidance": {
+    "recommended_views": ["side", "diagonal"],
+    "camera_height": "hip",
+    "distance_m": 2.5,
+    "framing_note": "Phone ~2.5m back at hip height, leaving headroom for lockout. Seated or standing."
   },
   "vision_support": false
 }

@@ -5,6 +5,76 @@ Format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.8.2] — 2026-09-05 — excess_torso_lean implemented; severity normalised; camera_guidance added
+
+The three code/data changes the `CODE_SPEC_MAP.md` audit surfaced as decisions, each confirmed with
+the user rather than guessed. 301 tests pass (290 -> 301, no test weakened);
+`aggregate.py --golden golden/ --mode full` still `Stage 0 gate: PASS`; prototype smoke green.
+
+### Added — `excess_torso_lean` for squat AND lunge (ADR-302)
+
+Four documents said this fault should be detected and nothing detected it: `EXERCISE_LIBRARY.md` §3
+lists torso lean for both exercises, `GOLDEN_SET_PROTOCOL.md` §7 tells the PT to label it, the
+`Vision_Contract` sheet carries it, and **`RECORDING_SHOTLIST.md` items 15 and 18 deliberately SEED
+it on lunge clips** -- so the ~23 bake-off clips were about to be recorded with a seeded fault the
+detector structurally could not see. Every seeded instance would have scored as a miss.
+
+- `detector/geometry.py`: `torso_lean_deg()` + `midpoint()`, transliterated from `kinetiq-demo2`'s
+  shipped `torsoLeanDeg()` so the offline detector measures the same quantity the product does.
+- `detector/faults.py`: `excess_torso_lean_present()`. Requires **all four** landmarks (both
+  shoulders, both hips) rather than either-side like `hip_sag`/`elbow_flare` -- torso lean is a
+  midline measurement, and one shoulder cannot locate a centre line. Missing any returns
+  insufficient-evidence, which the harness already surfaces rather than scoring either way.
+- `detector/flag_hysteresis.py`: registered for `squat` and `lunge`. This gives **lunge its first
+  sustained flag** -- it previously had only rep-aggregate `shallow_lunge` and never entered the
+  hysteresis path at all. `adapter.py` needed no change; it reads that table generically.
+- `exercises/{squat,lunge}.json`: the `common_errors` entry, plus a `flag_cues` line each
+  ("Keep your chest up" / "Keep your torso tall", both inside the 8-word cap).
+
+**No threshold value was invented** -- the gate on threshold values holds. `torso_lean_max_deg`
+already existed in both contracts (squat 45, lunge 20) and already matched demo2's shipped values;
+this only wires a rule to numbers that were already there.
+
+**Severity is `med` and explicitly provisional.** It matches each exercise's other form-quality
+faults and demo2's coaching-tone treatment, but excessive lean is lumbar-loading and a PT may argue
+for `high` (which would make it vetoing and raise its precision floor). Both contracts carry a
+`severity_note` putting that to the PT at GATE G-REAL rather than asserting a safety claim we have
+no evidence for.
+
+**Verified, not assumed:** on the `squat_badform_001` golden fixture the upright clip yields an
+identical rep count and identical existing flags with no torso-lean flag (no false positives);
+tilting the torso makes it fire on every rep and the cue layer returns the new cue within the word
+cap. Expect it to flag reps on real clips that were previously ignored -- untested on real bodies,
+which is precisely what GATE G-REAL is for.
+
+### Changed — severity tokens normalised to the canonical `med`
+
+All 30 `"severity": "medium"` occurrences across the 14 contracts are now `"med"`
+(`EXERCISE_LIBRARY.md` §4's canonical taxonomy). `exercise_lib.py`'s read-time alias is **kept** so
+the `Vision_Contract` sheet (still `medium`) and any older exported data keep loading -- it is now a
+compatibility shim rather than the primary mechanism. Verified beforehand that all 30 occurrences
+were severity tokens and none was, say, a `difficulty` value.
+
+### Added — `camera_guidance` on all 14 contracts
+
+The last `EXERCISE_LIBRARY.md` §4 field that no contract had. Shape:
+`recommended_views` / `camera_height` / `distance_m` / `framing_note`. squat/pushup/lunge
+transliterate the framing strings `kinetiq-demo2` and `kinetiq-demo3` already ship to users; the
+other 11 derive from §3's Side-view column and equipment, and record the known occlusion problems
+rather than papering over them (`bench_press`: bar and bench hide the torso from a pure side view;
+`hamstring_curl`: the machine pad hides the hips the hip-lift check needs).
+
+### Tests
+
+`detector/test_faults.py`: 9 new `TestExcessTorsoLean` cases -- upright not flagged, squat's 45
+threshold, the same geometry tripping lunge's stricter 20 (proving the threshold is read per-exercise
+rather than baked in), direction-independence, partial/absent landmarks and low visibility giving
+insufficient evidence, and a missing threshold declining rather than defaulting.
+`detector/test_flag_hysteresis.py`: the flag-inventory pin updated from five to six (renamed), plus
+two new coverage tests so a flag can never be registered without both a predicate and a matching
+library entry -- the failure mode where `adapter.py` silently skips a fault whose severity lookup
+finds nothing.
+
 ## [0.8.1] — 2026-09-05 — spec-conformance audit: exercise-contract shape reconciled
 
 Part of the "make the codebase provably derive from the markdown spec" pass. The audit itself is

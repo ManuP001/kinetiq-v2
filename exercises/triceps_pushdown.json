@@ -22,7 +22,7 @@
       {
         "error_id": "elbow_drift",
         "description": "Elbows drift away from the torso instead of staying pinned",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "abs(elbow.x - hip.x) - abs(elbow.x_at_rep_start - hip.x) > threshold.pushdown_elbow_drift_x",
           "threshold_key": "pushdown_elbow_drift_x",
@@ -32,7 +32,7 @@
       {
         "error_id": "torso_lean_momentum",
         "description": "Torso leans into the pushdown to help generate momentum",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "torso_lean_degrees > threshold.pushdown_torso_lean_max_deg",
           "threshold_key": "pushdown_torso_lean_max_deg",
@@ -42,7 +42,7 @@
       {
         "error_id": "partial_rom",
         "description": "Handle does not reach full extension at the bottom",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "elbow_angle_at_bottom_of_rep < threshold.pushdown_partial_rom_elbow_min",
           "threshold_key": "pushdown_partial_rom_elbow_min",
@@ -98,6 +98,12 @@
     "feature_window_frames": 10,
     "derived_features": ["left_elbow_angle", "right_elbow_angle", "elbow_drift_x", "torso_lean_deg", "symmetry", "tempo_ms"],
     "notes": "Advisory only. May detect rule-less errors (e.g. shoulder shrug compensation, uneven push). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "camera_guidance": {
+    "recommended_views": ["side"],
+    "camera_height": "hip",
+    "distance_m": 2.0,
+    "framing_note": "Phone ~2m away, side profile at hip height, so elbow drift and torso lean are both visible."
   },
   "vision_support": false
 }

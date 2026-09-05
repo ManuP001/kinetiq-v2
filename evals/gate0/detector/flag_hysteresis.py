@@ -69,18 +69,19 @@ _PREDICATES: Dict[str, Callable[..., Optional[bool]]] = {
     ),
     "elbow_flare": faults.elbow_flare_present,
     "hip_sag": faults.hip_sag_present,
+    "excess_torso_lean": faults.excess_torso_lean_present,
 }
 
 SUSTAINED_FLAG_IDS: Tuple[str, ...] = tuple(_PREDICATES.keys())
 
 # Which of SUSTAINED_FLAG_IDS applies to each exercise -- mirrors which flags each exercise's
-# faults.py predicates can ever produce (ROADMAP.md Stage 1 scope: squat/pushup/lunge). lunge has
-# none: shallow_lunge is its only implemented fault, and it's rep-aggregate (see module
-# docstring), so lunge never goes through this module at all today.
+# faults.py predicates can ever produce (ROADMAP.md Stage 1 scope: squat/pushup/lunge).
+# lunge's only other implemented fault (shallow_lunge) is rep-aggregate and never comes through
+# this module; excess_torso_lean is what brought lunge in here at all.
 EXERCISE_SUSTAINED_FLAG_IDS: Dict[str, Tuple[str, ...]] = {
-    "squat": ("knee_cave_left", "knee_cave_right", "shallow_depth"),
+    "squat": ("knee_cave_left", "knee_cave_right", "shallow_depth", "excess_torso_lean"),
     "pushup": ("elbow_flare", "hip_sag"),
-    "lunge": (),
+    "lunge": ("excess_torso_lean",),
 }
 
 

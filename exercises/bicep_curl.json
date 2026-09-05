@@ -22,7 +22,7 @@
       {
         "error_id": "elbow_drift",
         "description": "Elbows drift forward away from the torso instead of staying pinned",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "abs(elbow.x - hip.x) - abs(elbow.x_at_rep_start - hip.x) > threshold.curl_elbow_drift_x",
           "threshold_key": "curl_elbow_drift_x",
@@ -32,7 +32,7 @@
       {
         "error_id": "torso_swing",
         "description": "Torso rocks or swings to help generate momentum instead of an isolated curl",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "torso_lean_degrees > threshold.curl_torso_swing_max_deg",
           "threshold_key": "curl_torso_swing_max_deg",
@@ -42,7 +42,7 @@
       {
         "error_id": "partial_rom",
         "description": "Curl does not reach full flexion at the top",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "elbow_angle_at_top_of_rep > threshold.curl_partial_rom_elbow_max",
           "threshold_key": "curl_partial_rom_elbow_max",
@@ -98,6 +98,12 @@
     "feature_window_frames": 10,
     "derived_features": ["left_elbow_angle", "right_elbow_angle", "elbow_drift_x", "torso_lean_deg", "symmetry", "tempo_ms"],
     "notes": "Advisory only. May detect rule-less errors (e.g. wrist curl compensation, asymmetric curling speed). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "camera_guidance": {
+    "recommended_views": ["side"],
+    "camera_height": "hip",
+    "distance_m": 2.0,
+    "framing_note": "Phone ~2m away, side profile at hip height, so elbow position against the torso is visible."
   },
   "vision_support": false
 }

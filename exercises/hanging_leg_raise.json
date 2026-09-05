@@ -22,7 +22,7 @@
       {
         "error_id": "swing_momentum",
         "description": "Excess body swing used to generate momentum instead of a controlled raise",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "abs(shoulder.x - shoulder.x_at_rep_start) > threshold.hlr_swing_shoulder_drift_x",
           "threshold_key": "hlr_swing_shoulder_drift_x",
@@ -32,7 +32,7 @@
       {
         "error_id": "partial_rom",
         "description": "Legs do not reach horizontal -- insufficient hip flexion",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "hip_angle_at_bottom_of_rep > threshold.hlr_partial_rom_hip_angle_max",
           "threshold_key": "hlr_partial_rom_hip_angle_max",
@@ -42,7 +42,7 @@
       {
         "error_id": "lumbar_control",
         "description": "Lower back over-arches during the raise instead of staying braced",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "angle(shoulder, hip, knee) deviates from threshold.hlr_neutral_hip_angle by more than threshold.hlr_lumbar_control_tolerance",
           "threshold_key": "hlr_lumbar_control_tolerance",
@@ -99,6 +99,12 @@
     "feature_window_frames": 14,
     "derived_features": ["hip_angle", "shoulder_drift_x", "lumbar_control_deviation", "tempo_ms", "range_of_motion"],
     "notes": "Advisory only. May detect rule-less errors (e.g. asymmetric leg lift, grip slippage inferred from wrist instability). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "camera_guidance": {
+    "recommended_views": ["side"],
+    "camera_height": "hip",
+    "distance_m": 2.5,
+    "framing_note": "Phone ~2.5m back, side profile, far enough that the bar and the full leg-raise arc stay in frame."
   },
   "vision_support": false
 }

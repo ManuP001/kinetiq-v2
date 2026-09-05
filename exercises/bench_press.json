@@ -22,7 +22,7 @@
       {
         "error_id": "depth",
         "description": "Bar does not reach the chest -- insufficient range of motion",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "elbow_angle_at_bottom_of_rep > threshold.bench_depth_elbow_angle_max",
           "threshold_key": "bench_depth_elbow_angle_max",
@@ -32,7 +32,7 @@
       {
         "error_id": "bar_path_drift",
         "description": "Bar drifts horizontally instead of tracking a consistent vertical-ish path",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "abs(wrist.x - wrist.x_at_rep_start) > threshold.bench_bar_path_drift_x",
           "threshold_key": "bench_bar_path_drift_x",
@@ -42,7 +42,7 @@
       {
         "error_id": "uneven_press",
         "description": "One arm presses higher or faster than the other",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "abs(left_wrist.y - right_wrist.y) > threshold.bench_uneven_press_wrist_y",
           "threshold_key": "bench_uneven_press_wrist_y",
@@ -126,6 +126,12 @@
     "feature_window_frames": 12,
     "derived_features": ["left_elbow_angle", "right_elbow_angle", "wrist_path_x", "shoulder_hip_knee_angle", "symmetry", "tempo_ms"],
     "notes": "Advisory only (ADR-100/102). Cannot override rep count or safety flags -- and per this contract's hard rule, cannot substitute for PT confirmation on the two high-severity faults' thresholds either. Default off until expert-agreement eval passes; this exercise additionally requires PT sign-off before any form flag ships at all (EXERCISE_LIBRARY.md §5 gate 5)."
+  },
+  "camera_guidance": {
+    "recommended_views": ["diagonal", "side"],
+    "camera_height": "chest_above_bench",
+    "distance_m": 2.0,
+    "framing_note": "Phone ~2m away, diagonal from the head or foot of the bench, raised to above bench height. Expect heavy occlusion: the bar and bench hide the torso from a pure side view."
   },
   "vision_support": false
 }

@@ -35,6 +35,28 @@ def distance(a: XY, b: XY) -> float:
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
+def midpoint(a: XY, b: XY) -> XY:
+    return ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
+
+
+def torso_lean_deg(shoulder_mid: XY, hip_mid: XY) -> float:
+    """Absolute deviation of the torso (hip -> shoulder) from vertical, in degrees. 0 = upright.
+
+    Transliterated from kinetiq-demo2's shipped `torsoLeanDeg()` so the offline detector measures
+    the same quantity the product already does, rather than inventing a second definition of
+    "torso lean" that would disagree with it:
+
+        Math.abs(Math.atan2(sh.x - hp.x, hp.y - sh.y) * 180/Math.PI)
+
+    Note the argument order: atan2(horizontal offset, vertical offset), which yields the angle
+    FROM VERTICAL -- not the usual atan2(y, x) angle from horizontal. `hp.y - sh.y` is positive
+    when the shoulders sit above the hips, because image y grows downward. Absolute value, so a
+    forward and a backward lean of the same magnitude read the same; the exercises that use this
+    (squat, lunge) both cap total deviation rather than direction.
+    """
+    return abs(math.degrees(math.atan2(shoulder_mid[0] - hip_mid[0], hip_mid[1] - shoulder_mid[1])))
+
+
 def median(values: Sequence[float]) -> float:
     s = sorted(values)
     n = len(s)

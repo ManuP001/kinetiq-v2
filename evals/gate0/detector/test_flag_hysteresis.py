@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import gate_config  # noqa: E402
 from detector.flag_hysteresis import (  # noqa: E402
+    EXERCISE_SUSTAINED_FLAG_IDS,
     FlagHysteresisConfig,
     FlagOutcome,
     SUSTAINED_FLAG_IDS,
@@ -175,11 +176,39 @@ class TestDefaultConfigUsesGateConfigValues(unittest.TestCase):
 
 
 class TestSustainedFlagIdsCoverage(unittest.TestCase):
-    def test_covers_exactly_the_five_per_frame_flags(self):
+    def test_covers_exactly_the_per_frame_flags(self):
+        # Pins the inventory so a flag can't be added or dropped without a deliberate edit here.
+        # excess_torso_lean joined 2026-09-05 (squat + lunge) -- see faults.py's module docstring.
         self.assertEqual(
             set(SUSTAINED_FLAG_IDS),
-            {"knee_cave_left", "knee_cave_right", "shallow_depth", "elbow_flare", "hip_sag"},
+            {
+                "knee_cave_left",
+                "knee_cave_right",
+                "shallow_depth",
+                "elbow_flare",
+                "hip_sag",
+                "excess_torso_lean",
+            },
         )
+
+    def test_every_exercise_flag_has_a_predicate(self):
+        # EXERCISE_SUSTAINED_FLAG_IDS must never name a flag flag_hysteresis can't evaluate --
+        # adapter.py iterates it directly, so a typo there would silently drop a fault.
+        for exercise_id, flag_ids in EXERCISE_SUSTAINED_FLAG_IDS.items():
+            for flag_id in flag_ids:
+                self.assertIn(flag_id, SUSTAINED_FLAG_IDS, f"{exercise_id}.{flag_id}")
+
+    def test_every_exercise_flag_exists_in_that_exercises_library_entry(self):
+        # ... and must correspond to a real common_errors entry, or the severity lookup in
+        # adapter.py finds nothing and the flag is skipped without anyone noticing.
+        library = gate_config.load_exercise_library()
+        for exercise_id, flag_ids in EXERCISE_SUSTAINED_FLAG_IDS.items():
+            declared = {
+                err["error_id"]
+                for err in library[exercise_id]["reference_keypoints"]["common_errors"]
+            }
+            for flag_id in flag_ids:
+                self.assertIn(flag_id, declared, f"{exercise_id}.{flag_id} not in the library")
 
 
 if __name__ == "__main__":

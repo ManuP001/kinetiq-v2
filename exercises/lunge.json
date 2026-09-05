@@ -47,11 +47,22 @@
       {
         "error_id": "shallow_lunge",
         "description": "Insufficient depth — front knee angle does not reach bottom range",
-        "severity": "medium",
+        "severity": "med",
         "keypoint_signature": {
           "rule": "front_knee_angle_at_bottom > threshold.front_knee_angle_bottom_max",
           "threshold_key": "front_knee_angle_bottom_max",
           "phase_detected_in": ["bottom"]
+        }
+      },
+      {
+        "error_id": "excess_torso_lean",
+        "description": "Torso leans forward out of the upright lunge position, shifting load onto the lower back",
+        "severity": "med",
+        "severity_note": "Set to medium to match this exercise's other form-quality faults and kinetiq-demo2's coaching-tone treatment of it. Confirm with the PT at the GATE G-REAL labelling session -- RECORDING_SHOTLIST.md items 15 and 18 deliberately seed this fault, so it will be exercised on real clips.",
+        "keypoint_signature": {
+          "rule": "abs(angle_from_vertical(hip_midpoint -> shoulder_midpoint)) > threshold.torso_lean_max_deg",
+          "threshold_key": "torso_lean_max_deg",
+          "phase_detected_in": ["descending", "bottom", "ascending"]
         }
       }
     ]
@@ -78,6 +89,7 @@
     "flag_cues": {
       "front_knee_cave": "Drive your front knee outward",
       "front_knee_overextend": "Keep your knee behind your toes — step a little further forward",
+      "excess_torso_lean": "Keep your torso tall",
       "shallow_lunge": "Drop your back knee a little lower"
     }
   },
@@ -103,6 +115,12 @@
     "feature_window_frames": 14,
     "derived_features": ["left_knee_angle", "right_knee_angle", "torso_lean_deg", "symmetry", "tempo_ms", "range_of_motion"],
     "notes": "Advisory only. May detect rule-less errors (e.g. balance instability, stride asymmetry between sides). Cannot override rep count or safety flags. Default off until eval passes."
+  },
+  "camera_guidance": {
+    "recommended_views": ["side"],
+    "camera_height": "knee_to_hip",
+    "distance_m": 2.0,
+    "framing_note": "Phone ~2m away, side profile, at knee-to-hip height. Whole body visible. Alternate or single-leg both work."
   },
   "vision_support": false
 }
