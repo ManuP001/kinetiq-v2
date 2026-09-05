@@ -3,6 +3,8 @@
   "schema_version": 2,
   "name": "Forward Lunge",
   "demo_video_url": "TBD",
+  "tier": "A",
+  "movement_type": "rep",
   "target_muscles": ["quads", "glutes", "hamstrings", "hip_flexors"],
   "difficulty": "beginner",
   "equipment": [],
@@ -101,5 +103,6 @@
     "feature_window_frames": 14,
     "derived_features": ["left_knee_angle", "right_knee_angle", "torso_lean_deg", "symmetry", "tempo_ms", "range_of_motion"],
     "notes": "Advisory only. May detect rule-less errors (e.g. balance instability, stride asymmetry between sides). Cannot override rep count or safety flags. Default off until eval passes."
-  }
+  },
+  "vision_support": false
 }

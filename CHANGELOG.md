@@ -5,6 +5,46 @@ Format is loosely based on [Keep a Changelog](https://keepachangelog.com/).
 
 ---
 
+## [0.8.1] — 2026-09-05 — spec-conformance audit: exercise-contract shape reconciled
+
+Part of the "make the codebase provably derive from the markdown spec" pass. The audit itself is
+`../kinetiq v3/CODE_SPEC_MAP.md`; this entry covers the one **code/data** change it justified.
+No behaviour change: 290 tests pass (unchanged count) and `aggregate.py --golden golden/ --mode full`
+still reports `Stage 0 gate: PASS`.
+
+### Fixed — `exercises/{squat,pushup,lunge}.json` conform to EXERCISE_LIBRARY.md §4
+
+All three declared `schema_version: 2` but were missing three fields §4 requires and that all 11
+newer contracts already carry (they were left untouched when the 11 were authored in 0.7.0):
+
+- `tier: "A"` — directly from `EXERCISE_LIBRARY.md` §3's table, which places all three in Tier A.
+- `movement_type: "rep"` — all three are rep-counted, not timed holds.
+- `vision_support: false` — §4's rule is `false` until the exercise passes its own eval bar, and
+  §1 states vision-live count is still 0 pending re-proof under the v3 engine. **`false` is both the
+  spec-correct value and the gate-respecting one**; setting `true` here would have violated GATE
+  G-REAL.
+
+Field order matches the conformant siblings exactly, so all 14 contracts are now one shape.
+**Verified inert:** a search across `evals/`, `backend/`, and `kinetiq-demo3` found **no** reader of
+`tier`, `movement_type`, or `vision_support` — these are contract metadata today, so adding them
+cannot alter detector or prototype behaviour. Checked before editing, precisely because
+`vision_support` is the kind of field that *could* have gated the prototype's supported-exercise list.
+
+### Audited, conformant, unchanged
+
+`config.py`'s 8 Stage-0 gate floors (exact spec names); zero restated floor literals anywhere in the
+harness (closing `EVAL_HARNESS_STAGE0_SPEC.md` §11's last explicitly-open item); `detector/`'s Stage
+1–3 modules against `VISION_ARCHITECTURE.md`; `keypoint_map.py` as §11's "missing" keypoint mapping;
+`scorers/`'s five modules and §6's two deliberate edge cases; `prototype_api`'s no-pose-runtime and
+in-memory-only properties; and one-detector-two-consumers (`run_detector` defined once, imported by
+`prototype_api/main.py`, `golden_loader.py`, `effectiveness_report.py`).
+
+### Surfaced, not resolved
+
+Five code↔doc disagreements are listed as open decisions in `CODE_SPEC_MAP.md` rather than guessed at
+— notably **squat has no torso-lean fault** despite three docs saying it should, and **no CI config
+exists** to run the regression gate `EVAL_STRATEGY.md` §4 calls "the part v1/v2 never had".
+
 ## [0.8.0] — 2026-09-04 — live-prototype run scripts + Render deploy verification
 
 Stands the already-built live prototype up two ways for GATE G-REAL: locally with a real webcam,
